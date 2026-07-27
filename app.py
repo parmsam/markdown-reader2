@@ -7,7 +7,9 @@ on the local network (see LEARNINGS.md / CLAUDE.md for the design rationale).
 """
 from __future__ import annotations
 
+import os
 import re
+import socket
 import tempfile
 import threading
 from pathlib import Path
@@ -27,11 +29,28 @@ from render import render_document
 
 DB = db.get_db()
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+PORT = int(os.getenv("PORT", 5001))
 
 
 def _startup():
     tts.load_model()
     threading.Thread(target=cache.gc_orphaned_audio_cache, args=(DB,), daemon=True).start()
+
+
+def _get_lan_ip() -> str | None:
+    """Best-effort LAN-facing IP via the "UDP connect" trick -- no packets are
+    actually sent (UDP connect() just picks a route/local address), this
+    just asks the OS which local interface/address it would use to reach an
+    external host, which is exactly the address other devices on the LAN
+    need to reach this server at."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
 
 
 app = FastHTML(pico=False, on_startup=_startup)
@@ -60,8 +79,15 @@ def get_static(fname: str):
 # ---------------------------------------------------------------- library
 
 @app.get("/")
-def get_library():
-    return comp.library_page(db.list_articles(DB))
+def get_library(request: Request):
+    # Only worth showing when browsing from the same machine -- if you're
+    # already on another device's browser you're already using the LAN URL.
+    lan_url = None
+    if request.client and request.client.host in ("127.0.0.1", "::1"):
+        lan_ip = _get_lan_ip()
+        if lan_ip:
+            lan_url = f"http://{lan_ip}:{PORT}"
+    return comp.library_page(db.list_articles(DB), lan_url=lan_url)
 
 
 @app.get("/add")
@@ -261,4 +287,6 @@ def post_cache_gc():
 
 
 if __name__ == "__main__":
-    serve(reload=False)
+    # Explicit port (rather than letting serve() re-read $PORT itself) so it
+    # can never diverge from the PORT the LAN-URL banner above was built with.
+    serve(reload=False, port=PORT)

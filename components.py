@@ -108,7 +108,7 @@ def _nav():
     )
 
 
-def library_page(articles: list) -> Html:
+def library_page(articles: list, lan_url: str | None = None) -> Html:
     if not articles:
         body = Div(
             P("Your library is empty."),
@@ -119,9 +119,23 @@ def library_page(articles: list) -> Html:
         rows = [_article_row(a) for a in articles]
         body = Div(*rows, cls="article-list")
 
+    # Only rendered when app.py detects the request came from localhost --
+    # the point is giving you something to copy onto another device (phone,
+    # tablet) without having to go dig it out of the terminal that ran
+    # start.sh.
+    lan_banner = (
+        Div(
+            Span("On your network: ", cls="lan-banner-label"),
+            A(lan_url, href=lan_url, cls="lan-url-link"),
+            Button("Copy", type="button", cls="btn btn-sm", id="copy-lan-url", data_url=lan_url),
+            cls="lan-banner",
+        )
+        if lan_url else ""
+    )
+
     return Html(
         _head(f"Library — {APP_NAME}"),
-        Body(_nav(), Main(H1("Library"), body, cls="container")),
+        Body(_nav(), Main(H1("Library"), lan_banner, body, cls="container")),
     )
 
 

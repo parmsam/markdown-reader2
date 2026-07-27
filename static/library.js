@@ -1,6 +1,7 @@
-// Library page interactions (delete). Plain fetch()/DOM -- no htmx, no build
-// step, consistent with player.js and the rest of this app's no-external-JS
-// approach (this app is meant to run fully on-device with no CDN dependency).
+// Library page interactions (delete, copy-LAN-url). Plain fetch()/DOM -- no
+// htmx, no build step, consistent with player.js and the rest of this app's
+// no-external-JS approach (this app is meant to run fully on-device with no
+// CDN dependency).
 (function () {
   "use strict";
 
@@ -23,5 +24,21 @@
       console.error("Delete failed:", err);
       alert("Failed to delete article.");
     }
+  });
+
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest("#copy-lan-url");
+    if (!btn) return;
+
+    const url = btn.getAttribute("data-url");
+    const original = btn.textContent;
+    try {
+      await navigator.clipboard.writeText(url);
+      btn.textContent = "Copied!";
+    } catch (err) {
+      console.error("Clipboard copy failed:", err);
+      btn.textContent = "Copy failed";
+    }
+    setTimeout(() => { btn.textContent = original; }, 1500);
   });
 })();
