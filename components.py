@@ -9,12 +9,13 @@ import time
 
 from fasthtml.common import (
     A, Audio, Body, Blockquote, Button, Details, Div, Form, H1, H2, Head, Html,
-    Input, Label, Link, Main, Meta, NotStr, Nav, Option, P, Script, Select,
+    Img, Input, Label, Link, Main, Meta, NotStr, Nav, Option, P, Script, Select,
     Span, Style, Summary, Textarea, Title,
 )
 
 from tts import VOICES, DEFAULT_VOICE, DEFAULT_SPEED
 
+APP_NAME = "Lector"
 SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
 # Cache-busting query param for static assets, fixed at process start. Static
@@ -81,6 +82,8 @@ def _head(title: str):
         Meta(charset="utf-8"),
         Meta(name="viewport", content="width=device-width, initial-scale=1, viewport-fit=cover"),
         Title(title),
+        Link(rel="icon", type="image/svg+xml", href=f"/static/favicon.svg?v={_STATIC_VERSION}"),
+        Link(rel="apple-touch-icon", href=f"/static/apple-touch-icon.png?v={_STATIC_VERSION}"),
         Link(rel="stylesheet", href=f"/static/style.css?v={_STATIC_VERSION}"),
         Script(src=f"/static/player.js?v={_STATIC_VERSION}", defer=True),
         Script(src=f"/static/library.js?v={_STATIC_VERSION}", defer=True),
@@ -91,7 +94,11 @@ def _head(title: str):
 
 def _nav():
     return Nav(
-        A("Library", href="/", cls="nav-link"),
+        A(
+            Img(src=f"/static/favicon.svg?v={_STATIC_VERSION}", alt="", width="22", height="22", cls="brand-logo"),
+            Span(APP_NAME, cls="brand-name"),
+            href="/", cls="nav-link nav-brand",
+        ),
         A("+ Add article", href="/add", cls="nav-link nav-add"),
         Button(
             id="theme-toggle", cls="theme-toggle", type="button",
@@ -113,7 +120,7 @@ def library_page(articles: list) -> Html:
         body = Div(*rows, cls="article-list")
 
     return Html(
-        _head("Library — Markdown Reader"),
+        _head(f"Library — {APP_NAME}"),
         Body(_nav(), Main(H1("Library"), body, cls="container")),
     )
 
@@ -217,7 +224,7 @@ def add_article_page(url: str = "", error: str = "", autofetch: bool = False) ->
         if autofetch and url and not error else ""
     )
     return Html(
-        _head("Add article — Markdown Reader"),
+        _head(f"Add article — {APP_NAME}"),
         Body(
             _nav(),
             Main(
@@ -243,7 +250,7 @@ def edit_article_page(article) -> Html:
         cls="add-form",
     )
     return Html(
-        _head(f"Edit {article.title or 'Untitled'} — Markdown Reader"),
+        _head(f"Edit {article.title or 'Untitled'} — {APP_NAME}"),
         Body(
             _nav(),
             Main(
@@ -329,7 +336,7 @@ def article_page(article, body_html: str, toc: list) -> Html:
     voice = article.last_voice or DEFAULT_VOICE
     speed = article.last_speed or DEFAULT_SPEED
     return Html(
-        _head(f"{article.title or 'Untitled'} — Markdown Reader"),
+        _head(f"{article.title or 'Untitled'} — {APP_NAME}"),
         Body(
             _nav(),
             Div(

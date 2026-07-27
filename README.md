@@ -1,10 +1,15 @@
-# Markdown Reader 2
+<img src="static/favicon.svg" alt="Lector logo" width="72" height="72">
 
-A locally-hosted web app for a personal library of Markdown/PDF articles, read
-aloud with natural-sounding AI voices, with real-time sentence and word
-highlighting. Runs as a single Python process on your machine, reachable from
-any device on your local network (phone, tablet, another computer) -- no cloud
-services, no accounts, everything runs on-device via Apple's MLX framework.
+# Lector
+
+*Lector* (lek-tor): historically, someone employed to read aloud to others --
+famously the workers who read newspapers and novels aloud to cigar factories
+and textile mills before radio. This app is the same idea, run locally: a
+personal library of Markdown/PDF articles, read aloud with natural-sounding AI
+voices, with real-time sentence and word highlighting. Runs as a single Python
+process on your machine, reachable from any device on your local network
+(phone, tablet, another computer) -- no cloud services, no accounts,
+everything runs on-device via Apple's MLX framework.
 
 This is a rewrite of a previous Tauri desktop-app version as a network-
 accessible web app with a real persistent article library. See `CLAUDE.md` for

@@ -5,10 +5,12 @@ stack, setup, usage) and `LEARNINGS.md` (why things are built the way they are).
 
 ## What this is
 
-A FastHTML web app, run as a single long-lived Python process on your local
-network, that maintains a personal library of markdown/PDF articles and reads
-them aloud with Kokoro TTS (via `mlx-audio`, Apple Silicon only), with real-time
-sentence/word highlighting, a table of contents, and full playback controls.
+A FastHTML web app, branded as **Lector** in the UI/README (the repo/package
+name stays `markdown-reader2`), run as a single long-lived Python process on
+your local network, that maintains a personal library of markdown/PDF
+articles and reads them aloud with Kokoro TTS (via `mlx-audio`, Apple Silicon
+only), with real-time sentence/word highlighting, a table of contents, and
+full playback controls.
 
 This is a rewrite of `../markdown-reader` (a Tauri 2 desktop app) as a network-
 accessible Python web app with a real persistent library, consolidating logic

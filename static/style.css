@@ -59,6 +59,9 @@ body {
 .topnav > :first-child { margin-right: auto; }
 .nav-link { color: var(--fg); text-decoration: none; font-weight: 600; }
 .nav-add { color: var(--accent); }
+.nav-brand { display: flex; align-items: center; gap: 0.45rem; font-size: 1.05rem; }
+.brand-logo { display: block; border-radius: 5px; }
+.brand-name { letter-spacing: -0.01em; }
 .theme-toggle {
   background: none; border: 1px solid var(--border); border-radius: 8px;
   width: 2.5rem; height: 2.5rem; min-width: 2.5rem; min-height: 2.5rem;
