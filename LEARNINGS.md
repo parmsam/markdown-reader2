@@ -262,3 +262,62 @@ note the PyPI package name and the importable module name differ), `spacy`,
 `espeakng-loader`, and the `en_core_web_sm` spaCy model itself, which isn't on
 PyPI in installable form and has to be pulled from its GitHub wheel release
 directly (`en_core_web_sm @ https://github.com/explosion/spacy-models/...`).
+
+## iOS Safari: silent on the ring/mute switch, and a stale-JS red herring
+
+Playback worked fine on the same Mac serving the app, but was completely
+silent on an iPhone on the same LAN (page loaded fine, TTS fetches succeeded).
+Root cause: `player.js` only ever uses the raw Web Audio API
+(`AudioBufferSourceNode` -> `ctx.destination`), never an HTML `<audio>`/
+`<video>` element. iOS Safari puts pages like that into the "ambient" audio
+session category, which the hardware ring/silent switch mutes -- this is
+independent of in-app/system volume and throws no error, so it looks
+identical to "nothing is happening." Fixed by adding a hidden, looping, silent
+`<audio>` element (`components.py`'s `SILENT_WAV_DATA_URI`, a tiny inline data
+URI so no extra network request) and playing it on the page's first
+`pointerdown`/`keydown` (`player.js`'s `unlockAudio()`) -- playing *any* real
+`<audio>` element flips the whole page into the "playback" category for the
+rest of the session, after which the existing `AudioBufferSourceNode` output
+becomes audible with the switch on silent too.
+
+First test of the fix looked like it hadn't worked -- because it hadn't been
+tested yet: the phone was still showing the pre-fix `player.js` from Safari's
+cache. `/static/*` had no `Cache-Control` header at all, so browsers fall back
+to caching heuristics that can easily keep an old JS file around across a
+same-URL redeploy. A closed-tab/fresh-load retest immediately confirmed the
+real fix worked. Now fixed at the root: `app.py`'s `get_static()` sends
+`Cache-Control: public, max-age=31536000, immutable`, and `components.py`
+appends `?v={_STATIC_VERSION}` (a timestamp fixed at process start) to every
+static asset URL -- so a restart always busts the cache, and between restarts
+the far-future header lets the browser skip the network entirely.
+
+**Lesson:** "does the fix work" and "am I actually testing the fix" are
+separate questions on iOS Safari specifically -- always rule out a stale
+cached asset (closed tab / private tab / cache-busted URL) before concluding
+a fix didn't work, especially for anything under `static/`.
+
+## `display: flex` on a `<details>` element doesn't flex its real children
+
+Made the TOC sidebar collapsible on mobile by changing `toc_sidebar()` from a
+plain `<nav>` to `<details><summary>Contents</summary>...entries...</details>`,
+reusing `.toc-sidebar`'s existing `display: flex; flex-direction: column`.
+Desktop rendering broke: entries after a certain point started packing
+side-by-side instead of stacking, looking like text wrapping mid-sentence.
+Root cause verified with a headless-browser bounding-box dump (`getBoundingClientRect()`
+on every `.toc-entry`, comparing x/y across items) rather than guessing from
+the CSS: modern browsers render everything after a `<details>`'s `<summary>`
+inside one internal anonymous box. Setting `display: flex` on the `<details>`
+itself only flexes *that box* (as one item, alongside the summary) -- the
+buttons inside it fall back to their native `inline-block` flow and wrap like
+words in a paragraph, which is why short entries (e.g. "On using AI",
+"Domains") ended up on the same line while longer ones didn't. Fixed by never
+letting `<details>` lay out real content directly: entries are wrapped in an
+explicit `Div(*items, cls="toc-list")`, and the flex column rules moved onto
+`.toc-list` instead of `.toc-sidebar`. `.toc-sidebar` now only owns sizing/
+position/overflow; `<details>`/`<summary>` are just the disclosure chrome
+around it.
+
+**Lesson:** if `<details>` needs to do anything beyond default disclosure
+behavior (flex/grid layout of its content, animation, etc.), give the content
+its own wrapper element and style that -- don't style the `<details>` itself
+and assume its children behave like normal flex/grid items.

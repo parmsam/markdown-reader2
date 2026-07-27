@@ -9,6 +9,16 @@
   const LOOKAHEAD = 2;
   const AUTO_SCROLL_IDLE_MS = 2500;
 
+  // On narrow screens the TOC stacks above the article (see style.css's
+  // 900px breakpoint), so a long table of contents would push the article
+  // itself below the fold -- collapse the <details> at load there. Desktop
+  // keeps the server-rendered `open` (a sticky, always-expanded sidebar).
+  // Progressive enhancement: with JS disabled it just stays expanded.
+  const tocDetails = document.querySelector(".toc-sidebar");
+  if (tocDetails && tocDetails.tagName === "DETAILS" && window.matchMedia("(max-width: 900px)").matches) {
+    tocDetails.open = false;
+  }
+
   // ---- DOM: collect every segment element once, indexed by its data-seg ----
   const segEls = [];
   const segTypes = [];
@@ -40,6 +50,24 @@
     }
     return audioCtx;
   }
+
+  // ---- iOS silent-switch unlock ----
+  // iOS Safari puts pages that only use the Web Audio API into the "ambient"
+  // audio session category, which the hardware ring/silent switch mutes.
+  // Playing any HTML <audio> element (even silent) flips the page into the
+  // "playback" category for the rest of the session, so subsequent
+  // AudioBufferSourceNode playback is audible with the switch on silent too.
+  // Must run synchronously inside a real user-gesture handler.
+  let audioUnlocked = false;
+  function unlockAudio() {
+    if (audioUnlocked) return;
+    audioUnlocked = true;
+    getAudioContext().resume().catch(() => {});
+    const el = document.getElementById("ios-audio-unlock");
+    if (el) el.play().catch(() => {});
+  }
+  document.addEventListener("pointerdown", unlockAudio, { once: true, passive: true });
+  document.addEventListener("keydown", unlockAudio, { once: true });
 
   // ---- fetch + cache (in-memory, per-page; separate from the server disk cache:
   // this one saves a redundant HTTP round-trip within one page session, the disk

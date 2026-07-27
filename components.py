@@ -5,23 +5,86 @@ these builders and returns the result.
 """
 from __future__ import annotations
 
+import time
+
 from fasthtml.common import (
-    A, Body, Blockquote, Button, Details, Div, Form, H1, H2, Head, Html, Input,
-    Label, Link, Main, NotStr, Nav, Option, P, Script, Select, Span, Style,
-    Summary, Textarea, Title,
+    A, Audio, Body, Blockquote, Button, Details, Div, Form, H1, H2, Head, Html,
+    Input, Label, Link, Main, Meta, NotStr, Nav, Option, P, Script, Select,
+    Span, Style, Summary, Textarea, Title,
 )
 
 from tts import VOICES, DEFAULT_VOICE, DEFAULT_SPEED
 
 SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
 
+# Cache-busting query param for static assets, fixed at process start. Static
+# files are served with a far-future Cache-Control (see app.py's get_static),
+# so this is what forces phones/browsers to fetch the new player.js/style.css
+# after an edit + restart instead of silently keeping a stale cached copy
+# (bit us in practice: iOS Safari cached player.js across a fix that needed
+# it, see LEARNINGS.md).
+_STATIC_VERSION = str(int(time.time()))
+
+# A ~0.1s silent WAV, played (looped) on first touch/click on iOS. iOS Safari
+# puts pages that only use the Web Audio API into the "ambient" audio session
+# category, which is muted by the hardware ring/silent switch; playing *any*
+# HTML <audio> element flips the page into the "playback" category for the
+# rest of the session, so our AudioBufferSourceNode-based playback is audible
+# even with the switch flipped to silent. See player.js's unlockAudio().
+SILENT_WAV_DATA_URI = (
+    "data:audio/wav;base64,"
+    + "UklGRmQGAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YUAGAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+)
+
 
 def _head(title: str):
     return Head(
+        # Sets data-theme on <html> from localStorage *before* the stylesheet
+        # loads, so a saved light/dark choice applies on first paint instead
+        # of flashing the system-default theme first. Kept inline (not
+        # deferred) and ordered before the Link below for that reason --
+        # static/theme.js (deferred) owns the toggle button's click handling.
+        Script(NotStr(
+            "(function(){try{"
+            "var t=localStorage.getItem('theme');"
+            "if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);"
+            "}catch(e){}})();"
+        )),
+        Meta(charset="utf-8"),
+        Meta(name="viewport", content="width=device-width, initial-scale=1, viewport-fit=cover"),
         Title(title),
-        Link(rel="stylesheet", href="/static/style.css"),
-        Script(src="/static/player.js", defer=True),
-        Script(src="/static/library.js", defer=True),
+        Link(rel="stylesheet", href=f"/static/style.css?v={_STATIC_VERSION}"),
+        Script(src=f"/static/player.js?v={_STATIC_VERSION}", defer=True),
+        Script(src=f"/static/library.js?v={_STATIC_VERSION}", defer=True),
+        Script(src=f"/static/theme.js?v={_STATIC_VERSION}", defer=True),
     )
 
 
@@ -29,6 +92,10 @@ def _nav():
     return Nav(
         A("Library", href="/", cls="nav-link"),
         A("+ Add article", href="/add", cls="nav-link nav-add"),
+        Button(
+            id="theme-toggle", cls="theme-toggle", type="button",
+            title="Toggle light/dark theme", aria_label="Toggle light/dark theme",
+        ),
         cls="topnav",
     )
 
@@ -46,15 +113,25 @@ def library_page(articles: list) -> Html:
 
     return Html(
         _head("Library — Markdown Reader"),
-        Body(_nav(), Main(H1("Library"), body, cls="container"), data_theme="auto"),
+        Body(_nav(), Main(H1("Library"), body, cls="container")),
     )
+
+
+def _source_label(a):
+    """original_filename doubles as the source URL for source_type == "url"
+    articles, so render it as a link there instead of plain text."""
+    if not a.original_filename:
+        return ""
+    if a.source_type == "url":
+        return A(a.original_filename, href=a.original_filename, cls="article-filename", target="_blank", rel="noopener noreferrer")
+    return Span(a.original_filename, cls="article-filename")
 
 
 def _article_row(a) -> Div:
     resume_pct = ""
     if a.last_segment_index is not None and a.last_segment_index >= 0:
         resume_pct = Span("in progress", cls="badge badge-progress")
-    filename_span = Span(a.original_filename, cls="article-filename") if a.original_filename else ""
+    filename_span = _source_label(a)
     return Div(
         Div(
             A(a.title or "Untitled", href=f"/article/{a.id}", cls="article-title"),
@@ -76,7 +153,32 @@ def _article_row(a) -> Div:
     )
 
 
-def add_article_page() -> Html:
+def add_article_page(url: str = "", error: str = "", autofetch: bool = False) -> Html:
+    url_form = Form(
+        Label(
+            "Page URL",
+            Input(
+                name="url", type="url", value=url,
+                placeholder="https://example.com/some-article",
+                required=True, autocapitalize="off", autocorrect="off", spellcheck="false",
+                autofocus=bool(url) or None,
+            ),
+        ),
+        Label(
+            Input(name="use_page_title", type="checkbox", checked=True),
+            " Use the page's title",
+            cls="checkbox-label",
+        ),
+        Button("Fetch & add", type="submit", cls="btn btn-primary"),
+        P(
+            "Fetched with defuddle.md, falling back to Jina AI's reader if that fails.",
+            cls="form-hint",
+        ),
+        method="post",
+        action="/articles/url",
+        id="url-add-form",
+        cls="add-form",
+    )
     paste_form = Form(
         Label("Title (optional)", Input(name="title", type="text", placeholder="Derived from content if left blank")),
         Label("Markdown", Textarea(name="markdown", rows=16, placeholder="Paste or write markdown here...", required=True)),
@@ -98,16 +200,26 @@ def add_article_page() -> Html:
         enctype="multipart/form-data",
         cls="add-form",
     )
+    error_banner = Div(error, cls="add-error") if error else ""
+    autofetch_script = (
+        Script(NotStr(
+            "document.getElementById('url-add-form').submit();"
+        ))
+        if autofetch and url and not error else ""
+    )
     return Html(
         _head("Add article — Markdown Reader"),
         Body(
             _nav(),
             Main(
                 H1("Add an article"),
-                Details(Summary("Paste markdown"), paste_form, open=True),
+                error_banner,
+                Details(Summary("Add from a link"), url_form, open=True),
+                Details(Summary("Paste markdown"), paste_form, open=not url),
                 Details(Summary("Upload a file"), upload_form),
                 cls="container",
             ),
+            autofetch_script,
         ),
     )
 
@@ -139,7 +251,7 @@ def edit_article_page(article) -> Html:
     )
 
 
-def toc_sidebar(toc: list) -> Nav:
+def toc_sidebar(toc: list):
     if not toc:
         return Nav(cls="toc-sidebar")
     items = [
@@ -150,7 +262,18 @@ def toc_sidebar(toc: list) -> Nav:
         )
         for entry in toc
     ]
-    return Nav(H2("Contents"), *items, cls="toc-sidebar")
+    # A <details> rather than a plain <nav>: on desktop it's styled to look
+    # identical to the old always-expanded sidebar, but on narrow screens
+    # player.js collapses it at load, so a long table of contents doesn't
+    # push the article itself below the fold -- tapping "Contents"
+    # expands/collapses it like the add-article forms' <details> already do.
+    # The entries are wrapped in their own .toc-list flex column rather than
+    # relying on <details> to lay out its own children: modern browsers wrap
+    # everything after <summary> in an internal anonymous box, so a `display:
+    # flex` on the <details> itself only flexes [summary, that one wrapper]
+    # -- the buttons inside it then fell back to native inline-block flow
+    # and packed side-by-side like wrapped text instead of stacking.
+    return Details(Summary("Contents"), Div(*items, cls="toc-list"), open=True, cls="toc-sidebar")
 
 
 def player_bar(voice: str, speed: float) -> Div:
@@ -173,9 +296,12 @@ def player_bar(voice: str, speed: float) -> Div:
             Button("▶", id="btn-play-pause", title="Play/Pause (Space)"),
             Button("⏹", id="btn-stop", title="Stop"),
             Button("⏭", id="btn-skip-forward", title="Next sentence (→)"),
+            cls="transport-row",
+        ),
+        Div(
             Div(*speed_buttons, cls="speed-row", id="speed-row"),
             Select(*voice_options, id="voice-select"),
-            cls="player-controls",
+            cls="settings-row",
         ),
         id="player-bar",
         cls="player-bar",
@@ -203,8 +329,7 @@ def article_page(article, body_html: str, toc: list) -> Html:
                     Div(
                         Div(
                             H1(article.title or "Untitled"),
-                            Span(article.original_filename, cls="article-filename")
-                            if article.original_filename else "",
+                            _source_label(article),
                         ),
                         A("Edit", href=f"/article/{article.id}/edit", cls="btn btn-sm"),
                         cls="reader-header",
@@ -216,6 +341,14 @@ def article_page(article, body_html: str, toc: list) -> Html:
                 cls="reader-layout",
             ),
             player_bar(voice, speed),
+            Audio(
+                id="ios-audio-unlock",
+                src=SILENT_WAV_DATA_URI,
+                loop=True,
+                playsinline=True,
+                preload="auto",
+                style="display:none",
+            ),
             Script(
                 NotStr(
                     f"window.ARTICLE_ID = {article.id};\n"

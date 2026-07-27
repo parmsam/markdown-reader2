@@ -51,8 +51,8 @@ def get_db(path: str | Path = DB_PATH) -> Database:
             "title": str,
             "markdown": str,
             "content_hash": str,
-            "source_type": str,           # "paste" | "markdown_file" | "pdf"
-            "original_filename": str,
+            "source_type": str,           # "paste" | "markdown_file" | "pdf" | "url"
+            "original_filename": str,     # also holds the source URL when source_type == "url"
             "pdf_path": str,
             "created_at": str,
             "updated_at": str,

@@ -49,15 +49,22 @@ body {
   line-height: 1.6;
 }
 
-.container { max-width: 760px; margin: 0 auto; padding: 1.5rem 1.25rem 6rem; }
+.container { max-width: 760px; margin: 0 auto; padding: 1.5rem 1.25rem 7rem; }
 
 .topnav {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
   padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--bg); z-index: 10;
 }
+.topnav > :first-child { margin-right: auto; }
 .nav-link { color: var(--fg); text-decoration: none; font-weight: 600; }
 .nav-add { color: var(--accent); }
+.theme-toggle {
+  background: none; border: 1px solid var(--border); border-radius: 8px;
+  width: 2.5rem; height: 2.5rem; min-width: 2.5rem; min-height: 2.5rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem; line-height: 1; cursor: pointer; color: var(--fg); padding: 0;
+}
 
 .btn {
   display: inline-block; padding: 0.5rem 1rem; border-radius: 6px; border: none;
@@ -96,17 +103,24 @@ body {
   flex-direction: row; align-items: center; gap: 0.4rem;
 }
 .add-form label.checkbox-label input { width: auto; }
+.form-hint { color: var(--fg-muted); font-size: 0.8rem; margin: 0; }
 details { border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
 summary { cursor: pointer; font-weight: 600; }
+
+.add-error {
+  background: var(--surface); border: 1px solid var(--danger); color: var(--danger);
+  border-radius: 8px; padding: 0.75rem 1rem; margin: 1rem 0; font-size: 0.9rem;
+}
 
 .reader-layout { display: flex; gap: 2rem; align-items: flex-start; }
 .reader-main { flex: 1; min-width: 0; }
 .toc-sidebar {
   width: 220px; flex-shrink: 0; position: sticky; top: 3.5rem;
   max-height: calc(100vh - 4rem); overflow-y: auto; padding: 1rem 0.5rem;
-  display: flex; flex-direction: column; gap: 0.2rem;
+  border: none; margin-bottom: 0;
 }
-.toc-sidebar h2 { font-size: 0.85rem; text-transform: uppercase; color: var(--fg-muted); margin: 0 0 0.5rem 0.5rem; }
+.toc-sidebar summary { font-size: 0.85rem; text-transform: uppercase; color: var(--fg-muted); margin: 0 0 0.5rem 0.5rem; }
+.toc-list { display: flex; flex-direction: column; gap: 0.2rem; }
 .toc-entry {
   text-align: left; background: none; border: none; color: var(--fg); cursor: pointer;
   padding: 0.3rem 0.5rem; border-radius: 6px; font-size: 0.9rem;
@@ -121,8 +135,19 @@ summary { cursor: pointer; font-weight: 600; }
   .toc-sidebar { position: static; width: 100%; max-height: none; }
 }
 
-.reader-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.reader-header h1 { margin-bottom: 0.15rem; }
+@media (max-width: 600px) {
+  /* Player bar can wrap to two rows at this width (transport + speed/voice),
+     so leave more room than the desktop single-row bar needs -- better an
+     article's last lines have extra clearance than get hidden behind it. */
+  .container { padding: 1rem 1rem 10rem; }
+  .topnav { padding: 0.6rem 1rem; }
+  .article-row { flex-wrap: wrap; row-gap: 0.5rem; }
+  .article-row-meta { margin-left: auto; }
+  .resume-banner { flex-wrap: wrap; }
+}
+
+.reader-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.reader-header h1 { margin-bottom: 0.15rem; overflow-wrap: anywhere; }
 .edit-note { color: var(--fg-muted); font-size: 0.9rem; }
 
 .doc-body pre { background: var(--surface); padding: 1rem; border-radius: 8px; overflow-x: auto; }
@@ -141,20 +166,26 @@ summary { cursor: pointer; font-weight: 600; }
 body.has-player-bar { padding-bottom: 0; }
 .player-bar {
   position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg);
-  border-top: 1px solid var(--border); padding: 0.5rem 1rem 0.75rem;
+  border-top: 1px solid var(--border);
+  /* env(...) needs viewport-fit=cover (see components.py's _head()) to be
+     nonzero -- keeps controls clear of the home-indicator area on notched
+     iPhones instead of sitting flush against the bottom edge. */
+  padding: 0.5rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
 }
 .progress-bar { height: 3px; background: var(--surface); border-radius: 2px; margin-bottom: 0.5rem; overflow: hidden; }
 .progress-bar::after { content: ""; display: block; height: 100%; background: var(--accent); width: var(--pct, 0%); }
-.player-controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.player-controls button {
+.transport-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.settings-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
+.transport-row button, .settings-row button {
   background: var(--surface); border: none; border-radius: 6px; padding: 0.4rem 0.7rem;
   font-size: 1.1rem; cursor: pointer; color: var(--fg);
+  min-width: 2.75rem; min-height: 2.75rem;
 }
-#btn-play-pause { min-width: 2.6rem; }
-.speed-row { display: flex; gap: 0.25rem; margin-left: 0.5rem; }
-.speed-btn { font-size: 0.8rem !important; padding: 0.35rem 0.5rem !important; }
+#btn-play-pause { min-width: 3rem; }
+.speed-row { display: flex; gap: 0.25rem; }
+.speed-btn { font-size: 0.8rem !important; padding: 0.35rem 0.5rem !important; min-width: 2.4rem !important; min-height: 2.4rem !important; }
 .speed-btn.active { background: var(--accent) !important; color: var(--accent-fg); }
 #voice-select {
-  margin-left: auto; background: var(--surface); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.4rem;
+  background: var(--surface); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.4rem; min-height: 2.4rem;
 }

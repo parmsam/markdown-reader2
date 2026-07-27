@@ -20,9 +20,12 @@ the architecture and `LEARNINGS.md` for the design decisions behind it.
   (0.5x-2x), voice picker
 - Click any sentence to jump playback there; auto-generated table of contents
   from headings, also click-to-jump
-- A persistent library: paste markdown, upload a `.md`/`.txt` file, or upload
-  a PDF (converted to markdown on upload via marker-pdf) -- everything is
-  saved to a local SQLite database and stays there across restarts
+- A persistent library: paste markdown, upload a `.md`/`.txt` file, upload a
+  PDF (converted to markdown via marker-pdf), or add a web page by URL
+  (fetched clean via defuddle.md, falling back to Jina AI's reader) --
+  everything is saved to a local SQLite database and stays there across
+  restarts. Add-by-URL can also be triggered from an iOS Shortcut in the
+  Share Sheet, see "Share from iOS" below
 - Generated audio is cached to disk, so replaying an article (from the same
   device or another one on your network) is instant after the first listen
 - Reading progress (segment position, voice, speed) is saved server-side per
@@ -87,6 +90,33 @@ Hugging Face and creates a `data/` directory (gitignored) containing:
 - `data/library.db` -- the SQLite article library
 - `data/pdfs/` -- retained original PDF uploads
 - `data/audio_cache/` -- generated speech audio, cached per article/segment/voice/speed
+
+## Share from iOS
+
+You can add articles by pasting/uploading in the browser (see "Add an
+article"), or by handing a link straight from any app's Share Sheet to your
+library -- iOS Safari doesn't support the Web Share Target API PWAs use for
+this on Android, so the practical equivalent is a small iOS Shortcut that
+opens `/add?url=...&autofetch=1` (prefills the URL and submits it
+automatically, landing you straight on the finished article):
+
+1. Open the **Shortcuts** app -> **+** to create a new shortcut.
+2. Add action **Get URLs from Input** (so it works whether the share sheet
+   hands it a URL or a plain text string).
+3. Add action **URL Encode** on that result.
+4. Add action **Text**, and set its content to
+   `http://<your-mac's-LAN-IP>:5001/add?url=` followed by the URL-encoded
+   result from step 3, followed by `&autofetch=1`. (Find your LAN IP from
+   `start.sh`'s printed output, or `ipconfig getifaddr en0`.)
+5. Add action **Open URLs**, using that text.
+6. Tap the shortcut's name at the top, rename it (e.g. "Add to Reader"), tap
+   the settings/info icon, turn on **Show in Share Sheet**, and set it to
+   accept **URLs** and **Safari web pages**.
+
+Now sharing a link from Safari (or any app) -> **Add to Reader** opens the
+article straight in your library, fetched via defuddle.md/Jina (see below).
+Drop `&autofetch=1` from step 4 if you'd rather review/edit the URL before
+fetching.
 
 ## Voices
 

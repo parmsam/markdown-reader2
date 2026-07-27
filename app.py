@@ -11,6 +11,7 @@ import re
 import tempfile
 import threading
 from pathlib import Path
+from urllib.parse import quote
 
 from fasthtml.common import (
     FastHTML, FileResponse, JSONResponse, RedirectResponse, Request, Response, serve,
@@ -21,6 +22,7 @@ import components as comp
 import db
 import pdf_ingest
 import tts
+import url_ingest
 from render import render_document
 
 DB = db.get_db()
@@ -49,7 +51,10 @@ def get_static(fname: str):
     path = STATIC_DIR / fname
     if not path.resolve().is_relative_to(STATIC_DIR.resolve()) or not path.exists():
         return Response(status_code=404)
-    return FileResponse(path)
+    # Safe to cache forever: components.py's `?v={_STATIC_VERSION}` query
+    # param (fixed per-process) changes on every restart, which is the only
+    # time these files change (see LEARNINGS.md's iOS Safari stale-cache entry).
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 # ---------------------------------------------------------------- library
@@ -60,8 +65,12 @@ def get_library():
 
 
 @app.get("/add")
-def get_add():
-    return comp.add_article_page()
+def get_add(url: str = "", error: str = "", autofetch: bool = False):
+    # `url` (and optionally `autofetch=1`) let an iOS Shortcut in the Share Sheet
+    # hand off a shared link by opening this page directly -- see README's "Share
+    # from iOS" section. `error` round-trips a failed /articles/url attempt so the
+    # user sees why, with the URL still filled in instead of having to retype it.
+    return comp.add_article_page(url=url, error=error, autofetch=autofetch)
 
 
 @app.post("/articles")
@@ -71,6 +80,34 @@ def post_article(title: str = "", markdown: str = ""):
         return RedirectResponse("/add", status_code=303)
     final_title = title.strip() or _derive_title(markdown, "Untitled")
     article = db.create_article(DB, title=final_title, markdown=markdown, source_type="paste")
+    return RedirectResponse(f"/article/{article.id}", status_code=303)
+
+
+@app.post("/articles/url")
+def post_article_url(url: str = "", use_page_title: bool = False):
+    url = url.strip()
+    if not url:
+        return RedirectResponse("/add", status_code=303)
+    if not re.match(r"^https?://", url, re.IGNORECASE):
+        url = f"https://{url}"
+
+    def _fail(message: str):
+        return RedirectResponse(f"/add?url={quote(url)}&error={quote(message)}", status_code=303)
+
+    try:
+        page_title, markdown = url_ingest.fetch_article(url)
+    except Exception:
+        return _fail("Couldn't fetch that page -- it may be down, or blocking automated readers. "
+                      "Try again, or paste the content directly instead.")
+
+    markdown = markdown.strip()
+    if not markdown:
+        return _fail("Fetched that page, but it had no readable content.")
+
+    final_title = (page_title.strip() if use_page_title else "") or _derive_title(markdown, page_title.strip() or "Untitled")
+    article = db.create_article(
+        DB, title=final_title, markdown=markdown, source_type="url", original_filename=url,
+    )
     return RedirectResponse(f"/article/{article.id}", status_code=303)
 
 
