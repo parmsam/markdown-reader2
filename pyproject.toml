@@ -1,0 +1,25 @@
+[project]
+name = "markdown-reader2"
+version = "0.1.0"
+description = "Locally-hosted read-aloud markdown/PDF article library powered by Kokoro TTS (MLX)"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "python-fasthtml>=0.13.4",
+    "mlx-audio>=0.4.4",
+    "mlx>=0.31.2",
+    "misaki>=0.7.4",
+    "marker-pdf>=2.0.0",
+    "markdown-it-py>=4.0.0",
+    "mdit-py-plugins>=0.5.0",
+    "numpy>=2.4.6",
+    "num2words>=0.5.13",
+    "phonemizer-fork>=3.3.2",
+    "espeakng-loader>=0.2.4",
+    "spacy>=3.8.0",
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
