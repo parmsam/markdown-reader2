@@ -24,6 +24,7 @@ import re
 from itertools import groupby
 
 from markdown_it import MarkdownIt
+from markdown_it.rules_inline.state_inline import Delimiter, StateInline
 
 from segmentation import Segment, SegmentedDocument, segment_document
 
@@ -37,6 +38,98 @@ from segmentation import Segment, SegmentedDocument, segment_document
 # (bold/links/code/etc) fully intact.
 _md = MarkdownIt("commonmark").disable("html_block").disable("html_inline")
 
+
+def _mark_tokenize(state: StateInline, silent: bool) -> bool:
+    """Parse Obsidian-style ==highlighted text== into a <mark> span.
+
+    markdown-it-py's "commonmark" preset ships a `strikethrough` rule for
+    ~~text~~ but doesn't enable it; this is that same rule (doubled-delimiter,
+    balance_pairs-based, so bold/italic can nest inside) ported from '~' to
+    '=' and 's'/<s> to 'mark'/<mark>, since there's no "mark" plugin in
+    markdown-it-py or mdit_py_plugins to reuse.
+    """
+    start = state.pos
+    ch = state.src[start]
+    if silent or ch != "=":
+        return False
+
+    scanned = state.scanDelims(state.pos, True)
+    length = scanned.length
+    if length < 2:
+        return False
+
+    if length % 2:
+        token = state.push("text", "", 0)
+        token.content = ch
+        length -= 1
+
+    i = 0
+    while i < length:
+        token = state.push("text", "", 0)
+        token.content = ch + ch
+        state.delimiters.append(
+            Delimiter(
+                marker=ord(ch),
+                length=0,
+                token=len(state.tokens) - 1,
+                end=-1,
+                open=scanned.can_open,
+                close=scanned.can_close,
+            )
+        )
+        i += 2
+
+    state.pos += scanned.length
+    return True
+
+
+def _mark_postprocess_delims(state: StateInline, delimiters: list[Delimiter]) -> None:
+    lone_markers = []
+    for start_delim in delimiters:
+        if start_delim.marker != ord("=") or start_delim.end == -1:
+            continue
+        end_delim = delimiters[start_delim.end]
+
+        token = state.tokens[start_delim.token]
+        token.type = "mark_open"
+        token.tag = "mark"
+        token.nesting = 1
+        token.markup = "=="
+        token.content = ""
+
+        token = state.tokens[end_delim.token]
+        token.type = "mark_close"
+        token.tag = "mark"
+        token.nesting = -1
+        token.markup = "=="
+        token.content = ""
+
+        if (
+            state.tokens[end_delim.token - 1].type == "text"
+            and state.tokens[end_delim.token - 1].content == "="
+        ):
+            lone_markers.append(end_delim.token - 1)
+
+    while lone_markers:
+        i = lone_markers.pop()
+        j = i + 1
+        while j < len(state.tokens) and state.tokens[j].type == "mark_close":
+            j += 1
+        j -= 1
+        if i != j:
+            state.tokens[i], state.tokens[j] = state.tokens[j], state.tokens[i]
+
+
+def _mark_postprocess(state: StateInline) -> None:
+    _mark_postprocess_delims(state, state.delimiters)
+    for meta in state.tokens_meta:
+        if meta and "delimiters" in meta:
+            _mark_postprocess_delims(state, meta["delimiters"])
+
+
+_md.inline.ruler.before("emphasis", "mark", _mark_tokenize)
+_md.inline.ruler2.before("emphasis", "mark", _mark_postprocess)
+
 def _renders_safely_as_inline_markdown(raw_sentence: str) -> bool:
     """A sentence is one half of a sentence-boundary split over the *raw* block
     text (see segmentation.py). If an emphasis/code span happens to straddle
@@ -48,7 +141,7 @@ def _renders_safely_as_inline_markdown(raw_sentence: str) -> bool:
     reconstruct cross-sentence spans, treat an odd count of any delimiter
     character as a sign this sentence isn't self-contained markdown and fall
     back to safe plain text for just that sentence."""
-    for delim in ("**", "__"):
+    for delim in ("**", "__", "=="):
         if raw_sentence.count(delim) % 2 != 0:
             return False
     # Count single '*'/'_' not already accounted for by the doubled forms above

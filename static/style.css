@@ -8,6 +8,7 @@
   --surface: #f7f7f8;
   --highlight-sentence: #fff3b0;
   --highlight-word: #ffcf40;
+  --mark-bg: #b8f2d0;
   --danger: #dc2626;
 }
 
@@ -22,6 +23,7 @@
     --surface: #1e2127;
     --highlight-sentence: #4a4321;
     --highlight-word: #7a5c12;
+    --mark-bg: #1f3d2e;
     --danger: #f87171;
   }
 }
@@ -29,12 +31,12 @@
 :root[data-theme="dark"] {
   --bg: #16181d; --fg: #e8e8e8; --fg-muted: #9a9a9a; --border: #2c2f36;
   --accent: #5b8def; --accent-fg: #0b0d10; --surface: #1e2127;
-  --highlight-sentence: #4a4321; --highlight-word: #7a5c12; --danger: #f87171;
+  --highlight-sentence: #4a4321; --highlight-word: #7a5c12; --mark-bg: #1f3d2e; --danger: #f87171;
 }
 :root[data-theme="light"] {
   --bg: #ffffff; --fg: #1a1a1a; --fg-muted: #666; --border: #e0e0e0;
   --accent: #2563eb; --accent-fg: #ffffff; --surface: #f7f7f8;
-  --highlight-sentence: #fff3b0; --highlight-word: #ffcf40; --danger: #dc2626;
+  --highlight-sentence: #fff3b0; --highlight-word: #ffcf40; --mark-bg: #b8f2d0; --danger: #dc2626;
 }
 
 * { box-sizing: border-box; }
@@ -125,6 +127,7 @@ summary { cursor: pointer; font-weight: 600; }
 
 .doc-body pre { background: var(--surface); padding: 1rem; border-radius: 8px; overflow-x: auto; }
 .doc-body blockquote { border-left: 3px solid var(--accent); margin: 0; padding-left: 1rem; color: var(--fg-muted); }
+.doc-body mark { background: var(--mark-bg); color: var(--fg); border-radius: 3px; padding: 0 0.15em; }
 
 [data-seg] { border-radius: 3px; cursor: pointer; }
 [data-seg].sentence-active { background: var(--highlight-sentence); }

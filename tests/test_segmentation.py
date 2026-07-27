@@ -127,6 +127,14 @@ def test_blockquote_sentence_preserves_inline_markdown_in_raw_text():
     assert doc.segments[0].text == "A bold quote."
 
 
+def test_highlight_syntax_stripped_from_spoken_text_but_kept_in_raw_text():
+    # Obsidian's ==highlight== syntax must not survive into `text` -- Kokoro
+    # would otherwise try to narrate the literal "=" characters aloud.
+    doc = segment_document("This is ==highlighted== text. Second sentence.")
+    assert doc.segments[0].raw_text == "This is ==highlighted== text."
+    assert doc.segments[0].text == "This is highlighted text."
+
+
 def test_strip_markdown_does_not_eat_literal_marker_characters_mid_prose():
     # Real bug (inherited from v1): unanchored "[-*+]\s+"/">\s+"/etc regexes
     # would strip ANY "* "/"- "/"> " substring anywhere in prose, not just a

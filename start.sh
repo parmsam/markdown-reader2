@@ -17,6 +17,19 @@ fi
 PORT="${PORT:-5001}"
 LAN_IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
 
+# OSC 8 makes the URL a real clickable hyperlink in terminals that support it
+# (iTerm2, Terminal.app, kitty, VS Code, etc.) instead of relying on a
+# terminal's own best-effort auto-linkification of bare text. Skipped when
+# stdout isn't a live terminal (e.g. redirected to a log file) so the escape
+# codes don't end up as literal garbage there.
+hyperlink() {
+  if [ -t 1 ]; then
+    printf '\e]8;;%s\e\\%s\e]8;;\e\\' "$1" "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 uv run python app.py &
 PID=$!
 echo "$PID" >"$PID_FILE"
@@ -30,9 +43,12 @@ if ! kill -0 "$PID" 2>/dev/null; then
 fi
 
 echo "Running (pid $PID). Press Ctrl+C to stop (or run ./stop.sh from another terminal)."
-echo "  Local:  http://localhost:$PORT"
+if [ -t 1 ]; then
+  echo "  (cmd/ctrl-click a link below to open it directly in most modern terminals)"
+fi
+echo "  Local:  $(hyperlink "http://localhost:$PORT")"
 if [ -n "$LAN_IP" ]; then
-  echo "  LAN:    http://$LAN_IP:$PORT"
+  echo "  LAN:    $(hyperlink "http://$LAN_IP:$PORT")"
 fi
 
 # Only remove the pid file once the server process has actually exited --
