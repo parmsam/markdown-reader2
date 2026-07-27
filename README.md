@@ -22,7 +22,7 @@ the architecture and `LEARNINGS.md` for the design decisions behind it.
 - Real-time highlighting: the current sentence is highlighted, and individual
   words light up as they're spoken
 - Full playback control: play, pause, stop, skip forward/back, speed
-  (0.5x-2x), voice picker
+  (0.5x-2.5x), voice picker
 - Click any sentence to jump playback there; auto-generated table of contents
   from headings, also click-to-jump
 - A persistent library: paste markdown, upload a `.md`/`.txt` file, upload a

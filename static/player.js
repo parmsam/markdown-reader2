@@ -8,6 +8,9 @@
   const ARTICLE_ID = window.ARTICLE_ID;
   const LOOKAHEAD = 2;
   const AUTO_SCROLL_IDLE_MS = 2500;
+  // Read from the rendered speed buttons rather than hardcoding a second
+  // copy of components.py's SPEEDS list here (used by the [ / ] shortcuts).
+  const SPEEDS = Array.from(document.querySelectorAll(".speed-btn")).map((b) => parseFloat(b.dataset.speed));
 
   // On narrow screens the TOC stacks above the article (see style.css's
   // 900px breakpoint), so a long table of contents would push the article
@@ -393,13 +396,11 @@
     } else if (e.code === "ArrowRight") {
       skipForward();
     } else if (e.key === "[") {
-      const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-      const i = Math.max(0, speeds.indexOf(speed) - 1);
-      setSpeed(speeds[i]);
+      const i = Math.max(0, SPEEDS.indexOf(speed) - 1);
+      setSpeed(SPEEDS[i]);
     } else if (e.key === "]") {
-      const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-      const i = Math.min(speeds.length - 1, speeds.indexOf(speed) + 1);
-      setSpeed(speeds[i]);
+      const i = Math.min(SPEEDS.length - 1, SPEEDS.indexOf(speed) + 1);
+      setSpeed(SPEEDS[i]);
     }
   });
 

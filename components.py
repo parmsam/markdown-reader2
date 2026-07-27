@@ -16,7 +16,7 @@ from fasthtml.common import (
 from tts import VOICES, DEFAULT_VOICE, DEFAULT_SPEED
 
 APP_NAME = "Lector"
-SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
 
 # Cache-busting query param for static assets, fixed at process start. Static
 # files are served with a far-future Cache-Control (see app.py's get_static),
