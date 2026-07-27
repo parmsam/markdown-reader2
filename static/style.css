@@ -95,7 +95,7 @@ body {
 
 .add-form { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0 1.5rem; }
 .add-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; color: var(--fg-muted); }
-.add-form input:not([type="checkbox"]), .add-form textarea {
+.add-form input:not([type="checkbox"]):not([type="file"]), .add-form textarea {
   background: var(--surface); color: var(--fg); border: 1px solid var(--border);
   border-radius: 6px; padding: 0.5rem; font-family: inherit; font-size: 1rem;
 }
@@ -104,6 +104,20 @@ body {
 }
 .add-form label.checkbox-label input { width: auto; }
 .form-hint { color: var(--fg-muted); font-size: 0.8rem; margin: 0; }
+
+.file-dropzone {
+  position: relative; border: 2px dashed var(--border); border-radius: 8px;
+  padding: 1.75rem 1rem; text-align: center; color: var(--fg-muted); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.file-dropzone:focus-within, .file-dropzone.dragover { border-color: var(--accent); background: var(--surface); }
+.add-form .file-dropzone input[type="file"] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; margin: 0; padding: 0; border: none;
+}
+.file-drop-hint { font-size: 0.9rem; }
+.file-drop-name { font-weight: 600; color: var(--fg); font-size: 0.95rem; word-break: break-all; }
 details { border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
 summary { cursor: pointer; font-weight: 600; }
 

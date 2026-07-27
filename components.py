@@ -85,6 +85,7 @@ def _head(title: str):
         Script(src=f"/static/player.js?v={_STATIC_VERSION}", defer=True),
         Script(src=f"/static/library.js?v={_STATIC_VERSION}", defer=True),
         Script(src=f"/static/theme.js?v={_STATIC_VERSION}", defer=True),
+        Script(src=f"/static/upload.js?v={_STATIC_VERSION}", defer=True),
     )
 
 
@@ -188,7 +189,15 @@ def add_article_page(url: str = "", error: str = "", autofetch: bool = False) ->
         cls="add-form",
     )
     upload_form = Form(
-        Label("File (.md, .markdown, .txt, or .pdf)", Input(name="file", type="file", accept=".md,.markdown,.txt,.pdf", required=True)),
+        Label(
+            "File (.md, .markdown, .txt, or .pdf)",
+            Div(
+                Input(name="file", type="file", accept=".md,.markdown,.txt,.pdf", required=True),
+                Span("Drop a file here, or tap to browse", cls="file-drop-hint"),
+                Span("", cls="file-drop-name", hidden=True),
+                cls="file-dropzone",
+            ),
+        ),
         Label(
             Input(name="use_filename_as_title", type="checkbox", checked=True),
             " Use file name as title",
