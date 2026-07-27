@@ -76,6 +76,15 @@ def get_static(fname: str):
     return FileResponse(path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
+@app.get("/favicon.ico")
+def get_favicon_ico():
+    # Browsers/tools probe this fixed path directly regardless of the
+    # <link rel="icon"> tag in _head() -- serve the same SVG mark there too
+    # so it doesn't 404 (browsers go by content-type/sniffing for favicons,
+    # not the ".ico" extension in the URL).
+    return get_static("favicon.svg")
+
+
 # ---------------------------------------------------------------- library
 
 @app.get("/")
