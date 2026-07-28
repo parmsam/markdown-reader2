@@ -67,12 +67,9 @@
   });
 
   // Rename a folder (and all its sub-folders, see db.py's rename_folder).
-  // Lives on the <summary> row, so stop the click from also toggling the
-  // <details> open/closed the way any other click inside a <summary> would.
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".folder-rename-btn");
     if (!btn) return;
-    e.preventDefault();
 
     const oldPath = btn.getAttribute("data-folder-path");
     const newPath = window.prompt(`Rename folder "${oldPath}" to:`, oldPath);
@@ -100,7 +97,6 @@
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".folder-delete-btn");
     if (!btn) return;
-    e.preventDefault(); // don't also toggle the <details> open/closed
 
     const path = btn.getAttribute("data-folder-path");
     if (!confirm(`Remove folder "${path}"? Its articles move back to the library root -- they will NOT be deleted.`)) return;
@@ -122,15 +118,49 @@
   const sortSelect = document.getElementById("sort-select");
   if (sortSelect) sortSelect.addEventListener("change", () => sortSelect.form.submit());
 
-  // Per-folder sort <select>, lives in a folder's <summary> just like the
-  // Rename/Delete buttons -- same reason for the click guard: any click
-  // inside a <summary> (including one to open this dropdown) otherwise also
-  // toggles the <details> open/closed.
-  document.addEventListener("click", (e) => {
-    if (e.target.closest(".folder-sort-select")) e.preventDefault();
-  });
   document.addEventListener("change", (e) => {
     const select = e.target.closest(".folder-sort-select");
     if (select) select.form.submit();
   });
+
+  // ---- kebab ("⋯") menus: article-row and folder-header actions, both
+  // driven by the native Popover API (see components.py's _article_row /
+  // _render_folder_node) ----
+
+  // A folder's kebab button lives inside its <summary>, so a plain click
+  // would also toggle the <details> open/closed the way any click inside a
+  // <summary> does. stopPropagation() (not preventDefault()) is the fix --
+  // preventDefault() on this click also cancels the popovertarget button's
+  // own default action (showing the popover), since both are driven by the
+  // same click event; stopPropagation() only keeps the click from ever
+  // bubbling up to <summary>, leaving the popover's own behavior intact.
+  // Harmless no-op for article-row kebabs, which aren't inside a <summary>.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".kebab-btn")) e.stopPropagation();
+  });
+
+  // Position each popover menu near the button that opened it. There's no
+  // cross-browser way to CSS-anchor a [popover] to its trigger yet (CSS
+  // anchor positioning isn't in Safari), so this does it in JS instead, on
+  // the (non-bubbling, hence the capture-phase listener) `toggle` event
+  // every popover fires when its state changes.
+  document.addEventListener("toggle", (e) => {
+    const menu = e.target;
+    if (!(menu instanceof Element) || !menu.hasAttribute("popover")) return;
+    if (e.newState !== "open") return;
+    const trigger = document.querySelector(`[popovertarget="${menu.id}"]`);
+    if (!trigger) return;
+
+    const btnRect = trigger.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const margin = 8;
+    let left = btnRect.right - menuRect.width;
+    left = Math.max(margin, Math.min(left, window.innerWidth - menuRect.width - margin));
+    let top = btnRect.bottom + 4;
+    if (top + menuRect.height > window.innerHeight - margin) {
+      top = btnRect.top - menuRect.height - 4; // flip above if it wouldn't fit below
+    }
+    menu.style.left = `${left}px`;
+    menu.style.top = `${Math.max(margin, top)}px`;
+  }, true);
 })();

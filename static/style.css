@@ -162,8 +162,34 @@ body {
 
 .folder-move-form { display: inline-flex; }
 .folder-select {
-  padding: 0.3rem 1.6rem 0.3rem 0.5rem; font-size: 0.8rem; max-width: 10rem;
+  padding: 0.3rem 1.6rem 0.3rem 0.5rem; font-size: 0.8rem;
 }
+
+/* Kebab ("⋯") button + its popover menu, shared by article rows and folder
+   headers. The native Popover API (not a hand-rolled dropdown) gets
+   click-outside/Escape dismissal and top-layer stacking for free -- it
+   just needs its *open* appearance styled; :popover-open handles hiding it
+   otherwise via the UA stylesheet already. */
+.kebab-btn {
+  font-size: 1.1rem !important; font-weight: 700; padding: 0.2rem 0.6rem !important; line-height: 1;
+}
+.popover-menu {
+  position: fixed; margin: 0; padding: 0.4rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--fg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  min-width: 12rem; max-width: calc(100vw - 1.5rem);
+}
+.popover-menu:popover-open { display: flex; flex-direction: column; gap: 0.25rem; }
+.popover-field {
+  display: flex; flex-direction: column; gap: 0.25rem; padding: 0.3rem 0.5rem 0.4rem;
+  font-size: 0.8rem; color: var(--fg-muted);
+}
+.popover-field select { width: 100%; max-width: none; }
+.popover-item {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  border-radius: 6px; padding: 0.55rem 0.6rem; font-size: 0.9rem; color: var(--fg); cursor: pointer;
+}
+.popover-item:hover { background: var(--surface); }
+.popover-item-danger { color: var(--danger); }
 
 .folder-group {
   border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem;
@@ -175,10 +201,8 @@ body {
 }
 .folder-name { flex: 1; }
 .folder-count { color: var(--fg-muted); font-weight: 400; font-size: 0.85rem; }
-.folder-rename-btn { font-size: 0.75rem !important; padding: 0.2rem 0.5rem !important; }
-.folder-sort-form { display: inline-flex; }
 .folder-sort-select {
-  padding: 0.2rem 1.5rem 0.2rem 0.5rem; font-size: 0.75rem; max-width: 11rem;
+  padding: 0.2rem 1.5rem 0.2rem 0.5rem; font-size: 0.75rem;
 }
 .folder-group > .article-list { margin-top: 0.75rem; }
 .badge {

@@ -5,6 +5,7 @@ these builders and returns the result.
 """
 from __future__ import annotations
 
+import re
 import time
 
 from fasthtml.common import (
@@ -195,6 +196,14 @@ def _sort_articles(articles: list, sort: str) -> list:
     return sorted(articles, key=lambda a: a.created_at or "", reverse=True)  # "recent" (default/fallback)
 
 
+def _html_id(s: str) -> str:
+    """A folder path ("Notes/Work") into something safe to use as an HTML
+    id/popovertarget pair -- "/" is technically legal in an id, but not
+    worth the risk given how much else (CSS, querySelector) treats it
+    specially elsewhere in this app."""
+    return re.sub(r"[^a-zA-Z0-9_-]+", "-", s)
+
+
 def _folder_sort_select(path: str, inherited_sort: str, overrides: dict) -> Select:
     override = overrides.get(path)
     inherited_label = SORT_OPTIONS.get(inherited_sort, SORT_OPTIONS[DEFAULT_SORT])[0]
@@ -218,21 +227,34 @@ def _render_folder_node(name: str, node: dict, all_folders: list[str], inherited
         _render_folder_node(child_name, child, all_folders, my_sort, overrides)
         for child_name, child in _sorted_folder_entries(node["children"].items(), my_sort)
     ]
+    menu_id = f"folder-menu-{_html_id(node['path'])}"
     return Details(
         Summary(
             Span(f"\U0001F4C1 {name}", cls="folder-name"),
             Span(f"({total})", cls="folder-count"),
+            Button(
+                "⋯", type="button", cls="btn btn-sm kebab-btn",
+                popovertarget=menu_id, aria_label=f"Actions for folder {name}",
+            ),
+        ),
+        # Deliberately a *sibling* of <summary>, not nested inside it: a
+        # popover's content still bubbles click events through its DOM
+        # ancestors even though it's painted in the top layer, so anything
+        # inside here would need the same click-toggles-details guard as
+        # the trigger button otherwise.
+        Div(
             Form(
-                _folder_sort_select(node["path"], inherited_sort, overrides),
+                Label("Sort", _folder_sort_select(node["path"], inherited_sort, overrides), cls="popover-field"),
                 Input(type="hidden", name="folder", value=node["path"]),
                 method="post", action="/folders/sort", cls="folder-sort-form",
             ),
-            Button("Rename", type="button", cls="btn btn-sm folder-rename-btn", data_folder_path=node["path"]),
+            Button("Rename", type="button", cls="popover-item folder-rename-btn", data_folder_path=node["path"]),
             Button(
-                "Delete", type="button", cls="btn btn-sm btn-danger folder-delete-btn",
+                "Delete", type="button", cls="popover-item popover-item-danger folder-delete-btn",
                 data_folder_path=node["path"],
                 title="Removes the folder only -- its articles move back to the library root, they aren't deleted",
             ),
+            id=menu_id, popover="auto", cls="popover-menu",
         ),
         Div(*rows, cls="article-list") if rows else "",
         *children,
@@ -323,7 +345,7 @@ def _folder_move_form(a, all_folders: list[str]) -> Form:
     options += [Option(f, value=f, selected=(a.folder == f)) for f in all_folders]
     options.append(Option("+ New folder…", value="__new__"))
     return Form(
-        Select(*options, cls="folder-select", title="Move to folder"),
+        Label("Move to", Select(*options, cls="folder-select", title="Move to folder"), cls="popover-field"),
         Input(type="hidden", name="folder", value=a.folder or ""),
         method="post",
         action=f"/article/{a.id}/move",
@@ -336,6 +358,7 @@ def _article_row(a, all_folders: list[str] | None = None) -> Div:
     if a.last_segment_index is not None and a.last_segment_index >= 0:
         resume_pct = Span("in progress", cls="badge badge-progress")
     filename_span = _source_label(a)
+    menu_id = f"article-menu-{a.id}"
     return Div(
         Div(
             A(a.title or "Untitled", href=f"/article/{a.id}", cls="article-title"),
@@ -345,12 +368,18 @@ def _article_row(a, all_folders: list[str] | None = None) -> Div:
             cls="article-row-main",
         ),
         Div(
-            _folder_move_form(a, all_folders or []),
             Span(a.created_at[:10] if a.created_at else "", cls="article-date"),
             Button(
-                "Delete",
-                cls="btn btn-danger btn-sm",
-                data_delete_id=str(a.id),
+                "⋯", type="button", cls="btn btn-sm kebab-btn",
+                popovertarget=menu_id, aria_label="Article actions",
+            ),
+            Div(
+                _folder_move_form(a, all_folders or []),
+                Button(
+                    "Delete", type="button", cls="popover-item popover-item-danger",
+                    data_delete_id=str(a.id),
+                ),
+                id=menu_id, popover="auto", cls="popover-menu",
             ),
             cls="article-row-meta",
         ),

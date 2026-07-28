@@ -501,3 +501,35 @@ at whatever level they're siblings at, via the already-existing
 independently" are different enough problems that the second one usually
 can't be satisfied by parameterizing the same one-query mechanism the first
 one uses -- it needs its own pass over already-fetched data instead.
+
+## Kebab menus: preventDefault() cancels a popovertarget button's own popover
+
+Collapsed the article-row (move/delete) and folder-header (sort/rename/
+delete) actions behind a single "⋯" button each, using the native Popover
+API (`popover` + `popovertarget`) rather than a hand-rolled dropdown --
+click-outside dismissal, Escape-to-close, and top-layer stacking all come
+free. A folder's kebab button lives inside its `<summary>`, which meant the
+same problem every other interactive element in a folder header already
+had: a click there also toggles the `<details>` open/closed.
+
+The existing fix for that (used for Rename/Delete/the sort `<select>`) was
+`event.preventDefault()` in a delegated click listener. Tried the same thing
+here first -- and it broke the popover: `preventDefault()` on a
+`popovertarget` button's click cancels *that* button's own default action
+(showing its popover) exactly the same way it cancels `<summary>`'s toggle,
+since both are driven by the same click event. Confirmed with a minimal
+isolated repro (a bare `<details>`/`<summary>`/popovertarget-button page,
+no app code) before trusting it: `preventDefault()` -> popover stays
+closed; `stopPropagation()` alone -> `<details>` doesn't toggle *and* the
+popover opens, because it only stops the click from bubbling up to
+`<summary>`, without touching the click's default action at all.
+
+**Lesson:** "prevent an unwanted side effect of a click" and "prevent that
+click from doing anything else" are different asks -- `preventDefault()`
+answers the second one (cancels *every* default action tied to that event,
+not just the one you're thinking about), `stopPropagation()` answers the
+first (only keeps the event from reaching handlers on ancestors). Reach for
+`preventDefault()` out of habit and you can silently break a *different*
+default action on the same element you didn't mean to touch -- worth an
+isolated repro when a fix like this doesn't behave as expected, rather than
+guessing further from inside the full app.
