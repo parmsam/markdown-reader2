@@ -91,4 +91,7 @@
       alert("Failed to rename folder.");
     }
   });
+
+  const sortSelect = document.getElementById("sort-select");
+  if (sortSelect) sortSelect.addEventListener("change", () => sortSelect.form.submit());
 })();

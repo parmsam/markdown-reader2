@@ -13,6 +13,7 @@ from fasthtml.common import (
     Script, Select, Span, Style, Summary, Textarea, Title,
 )
 
+from db import SORT_OPTIONS, DEFAULT_SORT
 from tts import VOICES, DEFAULT_VOICE, DEFAULT_SPEED
 
 APP_NAME = "Lector"
@@ -170,7 +171,15 @@ def _render_folder_node(name: str, node: dict, all_folders: list[str]) -> Detail
     )
 
 
-def library_page(articles: list, lan_url: str | None = None, notice: str | None = None) -> Html:
+def _sort_form(sort: str) -> Form:
+    options = [Option(label, value=key, selected=(key == sort)) for key, (label, _) in SORT_OPTIONS.items()]
+    return Form(
+        Label("Sort by", Select(*options, name="sort", id="sort-select")),
+        method="get", action="/", id="sort-form", cls="sort-form",
+    )
+
+
+def library_page(articles: list, lan_url: str | None = None, notice: str | None = None, sort: str = DEFAULT_SORT) -> Html:
     if not articles:
         body = Div(
             P("Your library is empty."),
@@ -178,6 +187,11 @@ def library_page(articles: list, lan_url: str | None = None, notice: str | None 
             cls="empty-state",
         )
     else:
+        # `articles` is already ordered per `sort` (db.list_articles); folder
+        # bucketing below (_build_folder_tree) preserves that order within
+        # each bucket, so sorting applies inside every folder too, not just
+        # the root-level list. Folders themselves are always listed
+        # alphabetically (sorted(tree.items())), independent of `sort`.
         all_folders = sorted({a.folder for a in articles if a.folder})
         root_articles, tree = _build_folder_tree(articles)
         parts = []
@@ -203,7 +217,14 @@ def library_page(articles: list, lan_url: str | None = None, notice: str | None 
 
     return Html(
         _head(f"Library — {APP_NAME}"),
-        Body(_nav(), Main(H1("Library"), lan_banner, notice_banner, body, cls="container")),
+        Body(
+            _nav(),
+            Main(
+                Div(H1("Library"), _sort_form(sort), cls="library-header"),
+                lan_banner, notice_banner, body,
+                cls="container",
+            ),
+        ),
     )
 
 

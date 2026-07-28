@@ -88,7 +88,7 @@ def get_favicon_ico():
 # ---------------------------------------------------------------- library
 
 @app.get("/")
-def get_library(request: Request, notice: str = ""):
+def get_library(request: Request, notice: str = "", sort: str = db.DEFAULT_SORT):
     # Only worth showing when browsing from the same machine -- if you're
     # already on another device's browser you're already using the LAN URL.
     lan_url = None
@@ -96,7 +96,7 @@ def get_library(request: Request, notice: str = ""):
         lan_ip = _get_lan_ip()
         if lan_ip:
             lan_url = f"http://{lan_ip}:{PORT}"
-    return comp.library_page(db.list_articles(DB), lan_url=lan_url, notice=notice)
+    return comp.library_page(db.list_articles(DB, sort=sort), lan_url=lan_url, notice=notice, sort=sort)
 
 
 @app.get("/add")

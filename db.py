@@ -164,9 +164,19 @@ def rename_folder(db: Database, old_path: str, new_path: str) -> int:
     return updated
 
 
-def list_articles(db: Database) -> list["Article"]:
+SORT_OPTIONS = {
+    "recent": ("Recently added", "-created_at"),
+    "oldest": ("Oldest first", "created_at"),
+    "title_asc": ("Title (A-Z)", "title COLLATE NOCASE"),
+    "title_desc": ("Title (Z-A)", "title COLLATE NOCASE DESC"),
+}
+DEFAULT_SORT = "recent"
+
+
+def list_articles(db: Database, sort: str = DEFAULT_SORT) -> list["Article"]:
     articles = get_articles_table(db)
-    return list(articles(order_by="-created_at"))
+    _, order_by = SORT_OPTIONS.get(sort, SORT_OPTIONS[DEFAULT_SORT])
+    return list(articles(order_by=order_by))
 
 
 def get_article(db: Database, article_id: int) -> "Article | None":
