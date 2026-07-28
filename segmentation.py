@@ -27,6 +27,7 @@ class Segment:
     type: str           # "heading" | "paragraph" | "listitem" | "blockquote" | "code"
     level: int | None   # heading level 1-6, else None
     block_index: int    # which top-level block (split on blank lines) this came from
+    list_depth: int | None = None  # nesting depth for "listitem" segments (0 = top level), else None
 
 
 @dataclass
@@ -117,6 +118,7 @@ _HTML_BLOCK_RE = re.compile(r"^<")
 _CODE_FENCE_RE = re.compile(r"^```")
 _BLOCKQUOTE_RE = re.compile(r"^>")
 _LIST_ITEM_RE = re.compile(r"^[-*+]\s|^\d+\.\s")
+_LIST_ITEM_LINE_RE = re.compile(r"^(\s*)([-*+]\s+|\d+\.\s+)")
 
 
 def segment_document(markdown: str) -> SegmentedDocument:
@@ -178,13 +180,35 @@ def segment_document(markdown: str) -> SegmentedDocument:
                         type="blockquote", level=None, block_index=block_index,
                     ))
         elif _LIST_ITEM_RE.match(trimmed):
+            # Group lines into items first (a line starting with a marker
+            # begins a new item; any other line -- a wrapped continuation, or
+            # an indented sub-item -- attaches to the item currently being
+            # built) before turning each into a Segment, rather than treating
+            # every line as its own item: that previously turned a plain
+            # wrapped continuation line into a bogus extra bullet, and an
+            # indented sub-bullet's marker survived as literal "- " text
+            # instead of being recognized as a nested item (its regex match
+            # requires the marker at position 0, which leading indentation
+            # broke). `list_depth` (indent width // 2, a heuristic like the
+            # rest of this segmenter -- see module docstring) lets render.py
+            # rebuild real nested <ul>/<ol> markup from this flat list.
+            items: list[tuple[int, list[str]]] = []
             for line in trimmed.split("\n"):
-                plain = strip_markdown(line)
+                m = _LIST_ITEM_LINE_RE.match(line)
+                if m:
+                    depth = len(m.group(1).expandtabs(4)) // 2
+                    items.append((depth, [line.strip()]))
+                elif items:
+                    items[-1][1].append(line.strip())
+            for depth, raw_lines in items:
+                raw_joined = " ".join(raw_lines)
+                plain = strip_markdown(raw_joined)
                 if plain and has_speakable_content(plain):
                     idx = len(doc.segments)
                     doc.segments.append(Segment(
-                        index=idx, text=plain, raw_text=line,
+                        index=idx, text=plain, raw_text=raw_joined,
                         type="listitem", level=None, block_index=block_index,
+                        list_depth=depth,
                     ))
         else:
             plain_whole = strip_markdown(trimmed)

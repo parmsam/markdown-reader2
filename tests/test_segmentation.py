@@ -83,6 +83,25 @@ def test_list_items_each_become_a_segment():
     doc = segment_document("- one\n- two\n- three")
     assert len(doc.segments) == 3
     assert all(s.type == "listitem" for s in doc.segments)
+    assert all(s.list_depth == 0 for s in doc.segments)
+
+
+def test_nested_list_items_get_increasing_depth():
+    doc = segment_document("- parent\n  - child\n  - child two\n- parent two")
+    assert [s.text for s in doc.segments] == ["parent", "child", "child two", "parent two"]
+    assert [s.list_depth for s in doc.segments] == [0, 1, 1, 0]
+    # The nested marker must actually be recognized as a marker (stripped),
+    # not survive as literal "- " text in the spoken/plain form.
+    assert not doc.segments[1].text.startswith("-")
+
+
+def test_list_item_continuation_line_merges_into_previous_item():
+    # A wrapped line with no marker of its own (no blank line before it)
+    # continues the previous item rather than becoming a bogus extra one.
+    doc = segment_document("- one\n  more of one\n- two")
+    assert len(doc.segments) == 2
+    assert doc.segments[0].text == "one more of one"
+    assert doc.segments[1].text == "two"
 
 
 def test_blockquote_splits_into_sentences():

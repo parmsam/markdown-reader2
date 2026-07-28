@@ -1,3 +1,4 @@
+import re
 import sys
 from pathlib import Path
 
@@ -64,3 +65,27 @@ def test_literal_asterisk_in_prose_falls_back_gracefully():
     # crash or produce broken markup.
     html, _ = render_document("The result is 3 * 4 = 12 in this example.")
     assert "3 * 4 = 12" in html
+
+
+def test_nested_list_renders_as_real_nested_markup():
+    html, _ = render_document("- parent\n  - child\n  - child two\n- parent two")
+    assert "<ul><li" in html
+    # The nested <ul> must live inside the parent <li> (before it closes),
+    # not as a sibling list after it -- and the marker must not leak through
+    # as literal "- " text.
+    assert re.search(r"<li[^>]*>parent<ul>", html)
+    assert "- child" not in html
+    assert html.count("<ul>") == 2
+    assert html.count("</ul>") == 2
+
+
+def test_mixed_ordered_and_nested_unordered_list():
+    html, _ = render_document("1. one\n   - sub\n2. two")
+    assert "<ol><li" in html
+    assert re.search(r"<li[^>]*>one<ul><li", html)
+
+
+def test_list_item_continuation_renders_as_one_item_not_two():
+    html, _ = render_document("- one\n  more of one\n- two")
+    assert html.count("<li") == 2
+    assert "one more of one" in html

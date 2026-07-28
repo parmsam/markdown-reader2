@@ -321,3 +321,30 @@ around it.
 behavior (flex/grid layout of its content, animation, etc.), give the content
 its own wrapper element and style that -- don't style the `<details>` itself
 and assume its children behave like normal flex/grid items.
+
+## Nested/wrapped list items: every line was treated as its own item
+
+`segmentation.py`'s list branch turned *every line* of a list block into its
+own Segment/`<li>`, with no concept of an item spanning more than one line.
+Two real breakages followed: an indented sub-bullet ("  - child") kept its
+marker as literal text -- `_LIST_ITEM_LINE_RE`'s marker match requires
+position 0, so leading indentation meant it just wasn't recognized as a
+marker at all -- and a plain wrapped continuation line (no marker, no blank
+line before it) became a bogus extra bullet instead of part of the item
+above it. Fixed by grouping lines into items *before* creating segments: a
+line starting with a marker begins a new item, any other line attaches to
+whichever item is currently being built. Added `Segment.list_depth` (indent
+width // 2, a heuristic like the rest of this segmenter) so `render.py` can
+rebuild genuine nested `<ul>`/`<ol>` markup (a `<li>` stays open, deeper
+items nest inside it, popped via a small depth-tracking stack) instead of a
+flat list of `<li>`s -- deciding ordered-vs-unordered per depth level rather
+than once for the whole list, so mixed nesting (numbered list with bulleted
+sub-items) renders correctly too.
+
+**Lesson:** this segmenter's other "one block -> N segments" branches
+(blockquote, paragraph) already had a real per-item grouping step
+(`_sentence_pairs`) before creating segments; the list branch was the one
+place still naively mapping "one line -> one segment" 1:1, which is exactly
+where multi-line items broke. When adding a new per-item block type, group
+into logical items *first*, then segment each -- don't assume a source
+line is a reasonable unit on its own.

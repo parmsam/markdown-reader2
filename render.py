@@ -187,13 +187,34 @@ def _render_code(seg: Segment) -> str:
 
 
 def _render_list(segs: list[Segment]) -> str:
-    ordered = bool(_ORDERED_MARKER_RE.match(segs[0].raw_text))
-    tag = "ol" if ordered else "ul"
-    items = []
+    """Rebuild real nested <ul>/<ol> markup from segmentation.py's flat,
+    list_depth-annotated segments (a <li> for a depth-N item stays open while
+    its deeper children are emitted -- closed, along with its enclosing
+    list tag, only once a segment at depth <= N is reached or the list
+    ends). Each depth level's ordered/unordered-ness is decided by that
+    level's own first item, so e.g. a numbered list with bulleted sub-items
+    renders correctly rather than forcing one marker type throughout."""
+    out = []
+    stack: list[dict] = []  # open frames, outermost first: {"depth": int, "tag": "ul"|"ol"}
+
     for seg in segs:
+        depth = seg.list_depth or 0
+        while stack and stack[-1]["depth"] > depth:
+            frame = stack.pop()
+            out.append(f"</li></{frame['tag']}>")
+        if stack and stack[-1]["depth"] == depth:
+            out.append("</li>")
+        if not stack or stack[-1]["depth"] != depth:
+            tag = "ol" if _ORDERED_MARKER_RE.match(seg.raw_text) else "ul"
+            stack.append({"depth": depth, "tag": tag})
+            out.append(f"<{tag}>")
         inline = _md.renderInline(_LIST_MARKER_RE.sub("", seg.raw_text, count=1))
-        items.append(f'<li data-seg="{seg.index}" data-type="listitem">{inline}</li>')
-    return f"<{tag}>" + "".join(items) + f"</{tag}>"
+        out.append(f'<li data-seg="{seg.index}" data-type="listitem">{inline}')
+
+    while stack:
+        frame = stack.pop()
+        out.append(f"</li></{frame['tag']}>")
+    return "".join(out)
 
 
 def _render_blockquote(segs: list[Segment]) -> str:
