@@ -442,12 +442,21 @@ the old one), so `resetDurationEstimates()` -- called alongside the existing
 `cacheMap.clear()` in `setSpeed()`/`setVoice()` -- reverts every segment back
 to a fresh estimate rather than leaving stale real numbers in the total.
 
-Deliberately kept the *seek bar* itself scoped to the current segment only
-(0..that segment's duration), even though the text labels beside it are
-document-wide -- a real "seek anywhere in the whole article" scrubber would
-mean generating a not-yet-heard sentence's audio on the spot when you drag
-to it, a genuine latency tradeoff the user was asked about and explicitly
-deferred.
+First cut kept the seek bar scoped to the current segment only, reasoning
+that a document-wide scrubber would mean seeking to an arbitrary *time*,
+which implies generating a not-yet-heard sentence's audio on the spot at
+some precise mid-sentence offset. Revisited: "jump to a chunk" doesn't
+actually require that precision -- landing on the nearest *segment*
+(`segmentIndexAtTime()`, walking cumulative `segmentDurations` rather than
+segment count so it roughly tracks actual speaking time) and calling the
+already-existing `jumpTo()` is exactly what clicking a TOC entry or a
+paragraph in the document already does, on-demand generation included. So
+there are two bars now: `#doc-seek` (document-wide, coarse -- jumps to the
+nearest segment on release) above `#playhead-seek` (the original, current-
+segment-only, sample-accurate scrub). Each with its own elapsed/duration
+labels -- four numbers total, since collapsing them into one pair asking
+"elapsed/total" to mean two different scales at once (document position
+via the numbers, segment position via the bar) read as inconsistent.
 
 **Debugging note:** verifying this against real playback was blocked by the
 sandboxed headless-Chromium test environment's `AudioContext.currentTime`

@@ -442,11 +442,27 @@ def player_bar(voice: str, speed: float) -> Div:
         for v in VOICES
     ]
     return Div(
-        Div(cls="progress-bar", id="progress-bar"),
+        Div(
+            Span(
+                "0:00", id="doc-elapsed", cls="playhead-time",
+                title="Elapsed across the whole article",
+            ),
+            Input(
+                type="range", id="doc-seek", min="0", max="0", step="0.01", value="0",
+                cls="doc-seek", disabled=True,
+                aria_label="Jump to a sentence anywhere in the article",
+                title="Drag to jump to a sentence anywhere in the article",
+            ),
+            Span(
+                "0:00", id="doc-duration", cls="playhead-time",
+                title="Estimated total article duration (refines as more of it is generated)",
+            ),
+            cls="playhead-row",
+        ),
         Div(
             Span(
                 "0:00", id="playhead-elapsed", cls="playhead-time",
-                title="Elapsed across the whole article",
+                title="Elapsed in this sentence",
             ),
             Input(
                 type="range", id="playhead-seek", min="0", max="0", step="0.01", value="0",
@@ -455,7 +471,7 @@ def player_bar(voice: str, speed: float) -> Div:
             ),
             Span(
                 "0:00", id="playhead-duration", cls="playhead-time",
-                title="Estimated total article duration (refines as more of it is generated)",
+                title="Duration of this sentence",
             ),
             cls="playhead-row",
         ),

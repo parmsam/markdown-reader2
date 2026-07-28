@@ -240,31 +240,35 @@ body.has-player-bar { padding-bottom: 0; }
      iPhones instead of sitting flush against the bottom edge. */
   padding: 0.5rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
 }
-.progress-bar { height: 3px; background: var(--surface); border-radius: 2px; margin-bottom: 0.5rem; overflow: hidden; }
-.progress-bar::after { content: ""; display: block; height: 100%; background: var(--accent); width: var(--pct, 0%); }
-
 .playhead-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
 .playhead-time {
   font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--fg-muted);
   min-width: 2.6rem; text-align: center; flex-shrink: 0;
 }
-.playhead-seek {
+.playhead-seek, .doc-seek {
   flex: 1; height: 1.5rem; margin: 0; appearance: none; background: transparent; cursor: pointer;
 }
-.playhead-seek::-webkit-slider-runnable-track {
+.playhead-seek::-webkit-slider-runnable-track, .doc-seek::-webkit-slider-runnable-track {
   height: 4px; border-radius: 2px; background: var(--surface);
 }
-.playhead-seek::-moz-range-track {
+.playhead-seek::-moz-range-track, .doc-seek::-moz-range-track {
   height: 4px; border-radius: 2px; background: var(--surface);
 }
-.playhead-seek::-webkit-slider-thumb {
+.playhead-seek::-webkit-slider-thumb, .doc-seek::-webkit-slider-thumb {
   appearance: none; width: 14px; height: 14px; border-radius: 50%;
   background: var(--accent); margin-top: -5px;
 }
-.playhead-seek::-moz-range-thumb {
+.playhead-seek::-moz-range-thumb, .doc-seek::-moz-range-thumb {
   width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: none;
 }
-.playhead-seek:disabled { opacity: 0.4; cursor: default; }
+.playhead-seek:disabled, .doc-seek:disabled { opacity: 0.4; cursor: default; }
+/* Distinguish the whole-article bar from the per-sentence one below it --
+   thicker track/thumb since it represents a much bigger, coarser-grained
+   range (jump to any sentence) rather than fine-grained in-sentence seeking. */
+.doc-seek::-webkit-slider-runnable-track { height: 6px; }
+.doc-seek::-moz-range-track { height: 6px; }
+.doc-seek::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -5px; }
+.doc-seek::-moz-range-thumb { width: 16px; height: 16px; }
 
 .transport-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
 .settings-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }

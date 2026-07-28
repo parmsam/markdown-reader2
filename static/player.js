@@ -98,6 +98,21 @@
     return { elapsed: elapsedBefore + Math.max(0, withinSegElapsed), total };
   }
 
+  // Which segment a document-wide time target falls in -- "jump to a chunk"
+  // only needs a segment index (jumpTo() already generates-on-demand and
+  // plays whatever segment you jump to, exactly like clicking a TOC entry or
+  // a paragraph does), not a precise mid-segment offset. Walks cumulative
+  // estimated/real durations rather than segment *count*, so the position
+  // roughly tracks actual speaking time even though segments vary in length.
+  function segmentIndexAtTime(targetSeconds) {
+    let acc = 0;
+    for (let i = 0; i < segmentDurations.length; i++) {
+      acc += segmentDurations[i] || 0;
+      if (targetSeconds <= acc) return i;
+    }
+    return Math.max(0, segmentDurations.length - 1);
+  }
+
   function getAudioContext() {
     if (!audioCtx || audioCtx.state === "closed") {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -229,7 +244,7 @@
       if (segTypes[index] === "paragraph") setWordSpans(el);
       maybeAutoScroll(el);
     }
-    updateProgressBar();
+    updateDocSeekUI(0);
     syncNowPlaying();
     postProgress();
   }
@@ -281,47 +296,76 @@
   const playheadElapsedEl = document.getElementById("playhead-elapsed");
   const playheadDurationEl = document.getElementById("playhead-duration");
 
-  // The seek bar itself still represents position *within the current
-  // segment* (0..withinSegDuration) -- that's the only thing dragging it
-  // actually controls (see seekWithinSegment). The elapsed/duration text
-  // labels are document-wide (docElapsedAndTotal), deliberately a different
-  // scale than the bar next to them: seeking anywhere in the whole document
-  // instantly would mean generating audio for a not-yet-heard sentence on
-  // the spot, a real latency tradeoff -- see LEARNINGS.md.
+  // This seek bar/labels are scoped to the *current segment only*
+  // (0..withinSegDuration) -- dragging it calls seekWithinSegment. The
+  // document-wide bar below is the separate #doc-seek row.
   function updatePlayheadUI(withinSegElapsed, withinSegDuration) {
     if (!playheadSeek) return;
     playheadSeek.max = String(withinSegDuration || 0);
     playheadSeek.disabled = !withinSegDuration;
-
-    const { elapsed, total } = docElapsedAndTotal(withinSegElapsed);
-    playheadDurationEl.textContent = formatTime(total);
     if (playheadDragging) return; // don't fight the user's own drag position
-    playheadElapsedEl.textContent = formatTime(elapsed);
+    playheadElapsedEl.textContent = formatTime(withinSegElapsed);
     playheadSeek.value = String(withinSegElapsed);
   }
-
-  function tickPlayhead() {
-    if (playing && currentSource && audioCtx) {
-      const elapsed = Math.max(0, Math.min(audioCtx.currentTime - segmentStartedAt, segmentDuration));
-      updatePlayheadUI(elapsed, segmentDuration);
-    }
-    requestAnimationFrame(tickPlayhead);
-  }
-  requestAnimationFrame(tickPlayhead);
 
   if (playheadSeek) {
     ["pointerdown", "touchstart"].forEach((evt) => {
       playheadSeek.addEventListener(evt, () => { playheadDragging = true; });
     });
     playheadSeek.addEventListener("input", () => {
-      const { elapsed } = docElapsedAndTotal(parseFloat(playheadSeek.value));
-      playheadElapsedEl.textContent = formatTime(elapsed);
+      playheadElapsedEl.textContent = formatTime(parseFloat(playheadSeek.value));
     });
     playheadSeek.addEventListener("change", () => {
       playheadDragging = false;
       seekWithinSegment(parseFloat(playheadSeek.value));
     });
   }
+
+  // ---- document-wide bar: elapsed/estimated-total across the whole
+  // article, and a coarse-grained "jump to any sentence" scrubber. Unlike
+  // the per-segment bar above, dragging this doesn't need sample-accurate
+  // seeking -- landing on the nearest *segment* (segmentIndexAtTime) and
+  // calling jumpTo() is exactly what clicking a TOC entry or a paragraph in
+  // the document already does, generating that segment's audio on demand. ----
+  const docSeek = document.getElementById("doc-seek");
+  const docElapsedEl = document.getElementById("doc-elapsed");
+  const docDurationEl = document.getElementById("doc-duration");
+  let docSeekDragging = false;
+
+  function updateDocSeekUI(withinSegElapsed) {
+    if (!docSeek) return;
+    const { elapsed, total } = docElapsedAndTotal(withinSegElapsed);
+    docSeek.max = String(total || 0);
+    docSeek.disabled = !total;
+    docDurationEl.textContent = formatTime(total);
+    if (docSeekDragging) return;
+    docElapsedEl.textContent = formatTime(elapsed);
+    docSeek.value = String(elapsed);
+  }
+
+  if (docSeek) {
+    ["pointerdown", "touchstart"].forEach((evt) => {
+      docSeek.addEventListener(evt, () => { docSeekDragging = true; });
+    });
+    docSeek.addEventListener("input", () => {
+      docElapsedEl.textContent = formatTime(parseFloat(docSeek.value));
+    });
+    docSeek.addEventListener("change", () => {
+      docSeekDragging = false;
+      jumpTo(segmentIndexAtTime(parseFloat(docSeek.value)));
+    });
+  }
+
+  function tickPlayhead() {
+    if (playing && currentSource && audioCtx) {
+      const elapsed = Math.max(0, Math.min(audioCtx.currentTime - segmentStartedAt, segmentDuration));
+      updatePlayheadUI(elapsed, segmentDuration);
+      updateDocSeekUI(elapsed);
+    }
+    requestAnimationFrame(tickPlayhead);
+  }
+  requestAnimationFrame(tickPlayhead);
+  updateDocSeekUI(0); // show the estimated total right away, before playback starts
 
   // ---- playback session (generation-counter guarded, ported from usePlayer.ts) ----
   async function playSegment(index, myGen) {
@@ -330,6 +374,12 @@
       setActiveSegment(-1);
       segmentDuration = 0;
       updatePlayheadUI(0, 0);
+      // Article finished -- show the doc-wide bar as fully elapsed rather
+      // than 0 (docElapsedAndTotal has no "before segment -1" to sum).
+      if (docSeek) {
+        docSeek.value = docSeek.max;
+        docElapsedEl.textContent = formatTime(parseFloat(docSeek.max || "0"));
+      }
       setPlayingUI(false);
       return;
     }
@@ -367,6 +417,7 @@
       segmentStartedAt = startedAt;
       segmentDuration = entry.duration;
       updatePlayheadUI(0, entry.duration);
+      updateDocSeekUI(0);
       source.start();
       scheduleWordHighlights(segEls[index], entry.wordTimings, startedAt, index, myGen);
 
@@ -423,6 +474,7 @@
     };
     setPlayingUI(true);
     updatePlayheadUI(clamped, entry.duration);
+    updateDocSeekUI(clamped);
   }
 
   function startSession(fromSegment) {
@@ -514,13 +566,6 @@
     playing = isPlaying;
     const btn = document.getElementById("btn-play-pause");
     if (btn) btn.textContent = isPlaying ? "⏸" : "▶";
-  }
-
-  function updateProgressBar() {
-    const bar = document.getElementById("progress-bar");
-    if (!bar || totalSegments === 0) return;
-    const pct = currentSegment >= 0 ? ((currentSegment + 1) / totalSegments) * 100 : 0;
-    bar.style.setProperty("--pct", pct + "%");
   }
 
   let progressTimer = null;
