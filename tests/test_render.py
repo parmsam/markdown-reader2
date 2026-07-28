@@ -89,3 +89,11 @@ def test_list_item_continuation_renders_as_one_item_not_two():
     html, _ = render_document("- one\n  more of one\n- two")
     assert html.count("<li") == 2
     assert "one more of one" in html
+
+
+def test_list_immediately_after_bold_label_renders_as_real_list():
+    html, _ = render_document("**Label:**\n- one\n- two\n- three")
+    assert "<strong>Label:</strong>" in html
+    assert "<ul><li" in html
+    assert html.count("<li") == 3
+    assert "- one" not in html

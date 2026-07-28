@@ -392,3 +392,36 @@ plain native form submission actually transmits it before building UI
 around the assumption that it does -- several File/`<input>` properties are
 JS-visible-only and need an explicit fetch()+FormData workaround to reach
 the server at all.
+
+## A list right after other content, no blank line, all became one paragraph
+
+Found via a user's real document: a bold "label" line directly above its
+bullets with no blank line between them (`**What this covers:**` then
+`- one` on the very next line -- a very common way people actually write
+markdown). `segment_document()`'s block splitter only splits on a *blank*
+line, so the label and the whole list stayed one block; classification only
+looks at the block's first line, which here is the label, not a marker --
+so everything fell into the paragraph branch, spoken and rendered as one
+run-on paragraph with literal "- " characters instead of a heading-like line
+plus a real bulleted list. CommonMark handles this ("a list can interrupt a
+paragraph") but this segmenter's classification never had a notion of
+"the block *starts* as something else but a list begins partway through."
+
+Fixed with a pre-pass, `_split_prose_and_list()`: if a line with an
+*un-indented* marker appears after the first line of a block, split there --
+everything before is its own block, the marker onward is its own (list)
+block. Deliberately checks the strict `_LIST_ITEM_RE` (column 0 only), not
+the indentation-tolerant `_LIST_ITEM_LINE_RE` used inside the list branch
+itself -- using the tolerant one here was the first attempt, and it broke
+nested lists: an indented sub-item is *not* a new list interrupting
+something else, it's a continuation of the list already underway, and
+splitting there fed each half through independent `.strip()`s that silently
+ate the leading indentation encoding its nesting depth. Caught immediately
+by the existing nested-list tests -- exactly why those were worth having
+beyond the bug they were originally written for.
+
+**Lesson:** when a heuristic needs to distinguish "a new thing starting" from
+"a continuation of the thing already in progress," reuse of a
+continuation-tolerant regex for the *starting* check is an easy way to
+conflate the two. Keep the strict and tolerant variants distinct and use
+each only for the question it actually answers.

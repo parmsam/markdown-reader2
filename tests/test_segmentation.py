@@ -170,3 +170,27 @@ def test_multiline_blockquote_strips_every_line_prefix():
     assert doc.segments[1].text == "Line two."
     assert ">" not in doc.segments[0].text
     assert ">" not in doc.segments[1].text
+
+
+def test_list_immediately_following_label_with_no_blank_line():
+    # Real bug found via a user's actual document: a bold "label" line
+    # directly above its bullets, with no blank line separating them (a very
+    # common pattern) -- the block splitter only looks for a blank line, so
+    # without list-interruption handling the whole thing became one bogus
+    # paragraph, bullets and all, with literal "- " text.
+    doc = segment_document("**What this covers:**\n- one\n- two\n- three")
+    assert doc.segments[0].type == "paragraph"
+    assert doc.segments[0].text == "What this covers:"
+    list_segs = doc.segments[1:]
+    assert [s.text for s in list_segs] == ["one", "two", "three"]
+    assert all(s.type == "listitem" for s in list_segs)
+    assert all(s.list_depth == 0 for s in list_segs)
+
+
+def test_list_that_already_starts_the_block_is_unaffected():
+    # Guards against a regression in the fix above: a block that already
+    # begins with a marker (the common case) must go through unsplit --
+    # splitting on each subsequent top-level item would scatter one list
+    # across several block_index groups, each rendering as its own <ul>.
+    doc = segment_document("- one\n- two\n- three")
+    assert len({s.block_index for s in doc.segments}) == 1

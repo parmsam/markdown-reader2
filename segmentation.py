@@ -121,6 +121,41 @@ _LIST_ITEM_RE = re.compile(r"^[-*+]\s|^\d+\.\s")
 _LIST_ITEM_LINE_RE = re.compile(r"^(\s*)([-*+]\s+|\d+\.\s+)")
 
 
+def _split_prose_and_list(block: str) -> list[str]:
+    """A list can immediately follow other content with no blank line
+    separating them -- e.g. a bold "label" line directly above its bullets,
+    a very common real-world pattern. CommonMark treats that as the
+    preceding content ending and a new list beginning ("a list can
+    interrupt a paragraph"), but this segmenter's block splitter only looks
+    for a *blank* line, so without this step the whole thing gets
+    classified as one lump by its first line alone -- usually landing
+    everything in the paragraph branch, bullets and all, as literal "- "
+    text (a real bug found via a user's actual document). If an
+    un-indented marker line starts partway through a block, split there:
+    everything before becomes its own block, the marker line onward becomes
+    its own (list) block. Only one split point is needed since, by
+    construction, nothing before the first marker line can itself be a
+    marker line.
+
+    Deliberately uses _LIST_ITEM_RE (marker at column 0 only), not the
+    indentation-tolerant _LIST_ITEM_LINE_RE: an *indented* marker later in
+    the block is a nested sub-item of a list already underway (or this
+    block already started as one), not a new list interrupting something
+    else, and must be left for the existing list branch's own nesting logic
+    -- splitting there instead corrupts it (the split pieces get `.strip()`ed
+    independently, which silently eats the leading indentation that encodes
+    its nesting depth)."""
+    lines = block.split("\n")
+    if _LIST_ITEM_RE.match(lines[0]):
+        return [block]  # already list-first; the list branch handles all of it, nesting included
+    for i, line in enumerate(lines):
+        if i > 0 and _LIST_ITEM_RE.match(line):
+            before = "\n".join(lines[:i]).strip()
+            after = "\n".join(lines[i:]).strip()
+            return [b for b in (before, after) if b]
+    return [block]
+
+
 def segment_document(markdown: str) -> SegmentedDocument:
     doc = SegmentedDocument()
     # Normalize CRLF/CR to LF before anything else. The block splitter below
@@ -132,96 +167,100 @@ def segment_document(markdown: str) -> SegmentedDocument:
     # point content is saved) means content already stored with CRLF renders
     # correctly on next view too, with no migration needed.
     markdown = markdown.replace("\r\n", "\n").replace("\r", "\n")
-    blocks = re.split(r"\n{2,}", markdown)
+    raw_blocks = re.split(r"\n{2,}", markdown)
     block_index = 0
 
-    for block in blocks:
-        trimmed = block.strip()
-        if not trimmed:
+    for raw_block in raw_blocks:
+        outer_trimmed = raw_block.strip()
+        if not outer_trimmed:
             continue
-        doc.blocks.append(trimmed)
 
-        if _HTML_BLOCK_RE.match(trimmed):
-            pass  # HTML block -- nothing to read aloud
-        elif _THEMATIC_BREAK_RE.match(trimmed):
-            pass  # thematic break (horizontal rule) -- nothing to read aloud
-        elif (m := _HEADING_RE.match(trimmed)):
-            level = len(m.group(1))
-            plain = strip_markdown(trimmed)
+        for trimmed in _split_prose_and_list(outer_trimmed):
+            doc.blocks.append(trimmed)
+            _segment_one_block(trimmed, block_index, doc)
+            block_index += 1
+
+    return doc
+
+
+def _segment_one_block(trimmed: str, block_index: int, doc: SegmentedDocument) -> None:
+    if _HTML_BLOCK_RE.match(trimmed):
+        pass  # HTML block -- nothing to read aloud
+    elif _THEMATIC_BREAK_RE.match(trimmed):
+        pass  # thematic break (horizontal rule) -- nothing to read aloud
+    elif (m := _HEADING_RE.match(trimmed)):
+        level = len(m.group(1))
+        plain = strip_markdown(trimmed)
+        if plain and has_speakable_content(plain):
+            idx = len(doc.segments)
+            doc.segments.append(Segment(
+                index=idx, text=plain, raw_text=trimmed,
+                type="heading", level=level, block_index=block_index,
+            ))
+            doc.toc.append(TocEntry(level=level, text=plain, segment_index=idx))
+    elif _CODE_FENCE_RE.match(trimmed):
+        idx = len(doc.segments)
+        doc.segments.append(Segment(
+            index=idx, text="code block", raw_text=trimmed,
+            type="code", level=None, block_index=block_index,
+        ))
+    elif _BLOCKQUOTE_RE.match(trimmed):
+        # strip_markdown()'s own ">" removal only strips a single leading
+        # marker (anchored to the very start of the string, not per-line --
+        # see its docstring), so a multi-line blockquote's later lines would
+        # keep their "> " prefix if left to strip_markdown alone. Remove all
+        # of them here first (MULTILINE), then strip_markdown only has
+        # inline formatting left to handle.
+        raw_no_prefix = re.sub(r"^>\s?", "", trimmed, flags=re.MULTILINE)
+        plain_whole = strip_markdown(raw_no_prefix)
+        for plain_sentence, raw_sentence in _sentence_pairs(raw_no_prefix, plain_whole):
+            plain_sentence = plain_sentence.strip()
+            raw_sentence = raw_sentence.strip()
+            if plain_sentence and has_speakable_content(plain_sentence):
+                idx = len(doc.segments)
+                doc.segments.append(Segment(
+                    index=idx, text=plain_sentence, raw_text=raw_sentence,
+                    type="blockquote", level=None, block_index=block_index,
+                ))
+    elif _LIST_ITEM_RE.match(trimmed):
+        # Group lines into items first (a line starting with a marker
+        # begins a new item; any other line -- a wrapped continuation, or
+        # an indented sub-item -- attaches to the item currently being
+        # built) before turning each into a Segment, rather than treating
+        # every line as its own item: that previously turned a plain
+        # wrapped continuation line into a bogus extra bullet, and an
+        # indented sub-bullet's marker survived as literal "- " text
+        # instead of being recognized as a nested item (its regex match
+        # requires the marker at position 0, which leading indentation
+        # broke). `list_depth` (indent width // 2, a heuristic like the
+        # rest of this segmenter -- see module docstring) lets render.py
+        # rebuild real nested <ul>/<ol> markup from this flat list.
+        items: list[tuple[int, list[str]]] = []
+        for line in trimmed.split("\n"):
+            m = _LIST_ITEM_LINE_RE.match(line)
+            if m:
+                depth = len(m.group(1).expandtabs(4)) // 2
+                items.append((depth, [line.strip()]))
+            elif items:
+                items[-1][1].append(line.strip())
+        for depth, raw_lines in items:
+            raw_joined = " ".join(raw_lines)
+            plain = strip_markdown(raw_joined)
             if plain and has_speakable_content(plain):
                 idx = len(doc.segments)
                 doc.segments.append(Segment(
-                    index=idx, text=plain, raw_text=trimmed,
-                    type="heading", level=level, block_index=block_index,
+                    index=idx, text=plain, raw_text=raw_joined,
+                    type="listitem", level=None, block_index=block_index,
+                    list_depth=depth,
                 ))
-                doc.toc.append(TocEntry(level=level, text=plain, segment_index=idx))
-        elif _CODE_FENCE_RE.match(trimmed):
-            idx = len(doc.segments)
-            doc.segments.append(Segment(
-                index=idx, text="code block", raw_text=trimmed,
-                type="code", level=None, block_index=block_index,
-            ))
-        elif _BLOCKQUOTE_RE.match(trimmed):
-            # strip_markdown()'s own ">" removal only strips a single leading
-            # marker (anchored to the very start of the string, not per-line --
-            # see its docstring), so a multi-line blockquote's later lines would
-            # keep their "> " prefix if left to strip_markdown alone. Remove all
-            # of them here first (MULTILINE), then strip_markdown only has
-            # inline formatting left to handle.
-            raw_no_prefix = re.sub(r"^>\s?", "", trimmed, flags=re.MULTILINE)
-            plain_whole = strip_markdown(raw_no_prefix)
-            for plain_sentence, raw_sentence in _sentence_pairs(raw_no_prefix, plain_whole):
-                plain_sentence = plain_sentence.strip()
-                raw_sentence = raw_sentence.strip()
-                if plain_sentence and has_speakable_content(plain_sentence):
-                    idx = len(doc.segments)
-                    doc.segments.append(Segment(
-                        index=idx, text=plain_sentence, raw_text=raw_sentence,
-                        type="blockquote", level=None, block_index=block_index,
-                    ))
-        elif _LIST_ITEM_RE.match(trimmed):
-            # Group lines into items first (a line starting with a marker
-            # begins a new item; any other line -- a wrapped continuation, or
-            # an indented sub-item -- attaches to the item currently being
-            # built) before turning each into a Segment, rather than treating
-            # every line as its own item: that previously turned a plain
-            # wrapped continuation line into a bogus extra bullet, and an
-            # indented sub-bullet's marker survived as literal "- " text
-            # instead of being recognized as a nested item (its regex match
-            # requires the marker at position 0, which leading indentation
-            # broke). `list_depth` (indent width // 2, a heuristic like the
-            # rest of this segmenter -- see module docstring) lets render.py
-            # rebuild real nested <ul>/<ol> markup from this flat list.
-            items: list[tuple[int, list[str]]] = []
-            for line in trimmed.split("\n"):
-                m = _LIST_ITEM_LINE_RE.match(line)
-                if m:
-                    depth = len(m.group(1).expandtabs(4)) // 2
-                    items.append((depth, [line.strip()]))
-                elif items:
-                    items[-1][1].append(line.strip())
-            for depth, raw_lines in items:
-                raw_joined = " ".join(raw_lines)
-                plain = strip_markdown(raw_joined)
-                if plain and has_speakable_content(plain):
-                    idx = len(doc.segments)
-                    doc.segments.append(Segment(
-                        index=idx, text=plain, raw_text=raw_joined,
-                        type="listitem", level=None, block_index=block_index,
-                        list_depth=depth,
-                    ))
-        else:
-            plain_whole = strip_markdown(trimmed)
-            for plain_sentence, raw_sentence in _sentence_pairs(trimmed, plain_whole):
-                plain_sentence = plain_sentence.strip()
-                raw_sentence = raw_sentence.strip()
-                if plain_sentence and has_speakable_content(plain_sentence):
-                    idx = len(doc.segments)
-                    doc.segments.append(Segment(
-                        index=idx, text=plain_sentence, raw_text=raw_sentence,
-                        type="paragraph", level=None, block_index=block_index,
-                    ))
-
-        block_index += 1
-
-    return doc
+    else:
+        plain_whole = strip_markdown(trimmed)
+        for plain_sentence, raw_sentence in _sentence_pairs(trimmed, plain_whole):
+            plain_sentence = plain_sentence.strip()
+            raw_sentence = raw_sentence.strip()
+            if plain_sentence and has_speakable_content(plain_sentence):
+                idx = len(doc.segments)
+                doc.segments.append(Segment(
+                    index=idx, text=plain_sentence, raw_text=raw_sentence,
+                    type="paragraph", level=None, block_index=block_index,
+                ))
