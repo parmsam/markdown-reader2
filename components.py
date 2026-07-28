@@ -480,6 +480,7 @@ def player_bar(voice: str, speed: float) -> Div:
             Button("▶", id="btn-play-pause", title="Play/Pause (Space)"),
             Button("⏹", id="btn-stop", title="Stop"),
             Button("⏭", id="btn-skip-forward", title="Next sentence (→)"),
+            Button("📍", id="btn-jump-to-current", title="Scroll to currently playing sentence"),
             cls="transport-row",
         ),
         Div(

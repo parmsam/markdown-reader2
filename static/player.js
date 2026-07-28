@@ -605,6 +605,19 @@
   if (skipBackBtn) skipBackBtn.addEventListener("click", skipBack);
   const skipForwardBtn = document.getElementById("btn-skip-forward");
   if (skipForwardBtn) skipForwardBtn.addEventListener("click", skipForward);
+  const jumpToCurrentBtn = document.getElementById("btn-jump-to-current");
+  if (jumpToCurrentBtn) {
+    jumpToCurrentBtn.addEventListener("click", () => {
+      if (currentSegment < 0 || !segEls[currentSegment]) return;
+      // A manual scroll suppresses auto-scroll for AUTO_SCROLL_IDLE_MS (see
+      // the scroll listener below) -- explicitly asking to jump back to the
+      // current sentence is a clear signal to resume following along, so
+      // clear that suppression instead of leaving it on a stale cooldown.
+      userScrolling = false;
+      clearTimeout(userScrollTimer);
+      segEls[currentSegment].scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
 
   document.querySelectorAll(".speed-btn").forEach((btn) => {
     btn.addEventListener("click", () => setSpeed(parseFloat(btn.dataset.speed)));

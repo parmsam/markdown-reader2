@@ -225,6 +225,8 @@ body.audio-only-mode .toc-sidebar {
    its inline style="display:..." directly (player.js), which otherwise
    always wins over a plain stylesheet rule regardless of selector specificity. */
 body.audio-only-mode .resume-banner { display: none !important; }
+/* Nothing to scroll to in audio-only mode -- the doc-body it targets is hidden. */
+body.audio-only-mode #btn-jump-to-current { display: none; }
 #now-playing-text {
   font-size: 1.4rem; line-height: 1.5; font-weight: 600; text-align: center;
   padding: 3rem 1rem; max-width: 40rem; margin: 0 auto;
