@@ -425,3 +425,36 @@ beyond the bug they were originally written for.
 continuation-tolerant regex for the *starting* check is an easy way to
 conflate the two. Keep the strict and tolerant variants distinct and use
 each only for the question it actually answers.
+
+## Document-wide playhead: estimated, not exact, and why
+
+The player generates and plays audio one segment at a time, lazily -- there
+is no whole-document duration to know without either generating every
+segment upfront (slow for a long article, defeats the point of lazy
+generation) or estimating. The playhead's elapsed/total time labels are a
+word-count-based estimate (`~150wpm / speed`) per segment, refined to the
+*real* duration the moment each segment actually gets generated --
+`recordRealDuration()` also back-calibrates the words/sec rate itself from
+that real data, so later not-yet-generated estimates get more accurate as
+you listen, without ever touching a segment's own real duration once known.
+A voice/speed change invalidates every real duration (they were measured at
+the old one), so `resetDurationEstimates()` -- called alongside the existing
+`cacheMap.clear()` in `setSpeed()`/`setVoice()` -- reverts every segment back
+to a fresh estimate rather than leaving stale real numbers in the total.
+
+Deliberately kept the *seek bar* itself scoped to the current segment only
+(0..that segment's duration), even though the text labels beside it are
+document-wide -- a real "seek anywhere in the whole article" scrubber would
+mean generating a not-yet-heard sentence's audio on the spot when you drag
+to it, a genuine latency tradeoff the user was asked about and explicitly
+deferred.
+
+**Debugging note:** verifying this against real playback was blocked by the
+sandboxed headless-Chromium test environment's `AudioContext.currentTime`
+not advancing in real time (confirmed with a bare `new AudioContext()` and
+zero app code -- 1.5s of wall-clock time produced ~0.005s of audio-clock
+time). Not a code bug: a previously-committed, previously-verified-working
+version of this same player showed the identical stall when tested in the
+same session. When live audio timing can't be exercised, verify the pure
+calculation logic in isolation (a plain Node script reimplementing the
+formulas, no browser needed) instead of concluding the feature is broken.

@@ -444,12 +444,19 @@ def player_bar(voice: str, speed: float) -> Div:
     return Div(
         Div(cls="progress-bar", id="progress-bar"),
         Div(
-            Span("0:00", id="playhead-elapsed", cls="playhead-time"),
+            Span(
+                "0:00", id="playhead-elapsed", cls="playhead-time",
+                title="Elapsed across the whole article",
+            ),
             Input(
                 type="range", id="playhead-seek", min="0", max="0", step="0.01", value="0",
                 cls="playhead-seek", disabled=True, aria_label="Seek within current sentence",
+                title="Seek within the current sentence",
             ),
-            Span("0:00", id="playhead-duration", cls="playhead-time"),
+            Span(
+                "0:00", id="playhead-duration", cls="playhead-time",
+                title="Estimated total article duration (refines as more of it is generated)",
+            ),
             cls="playhead-row",
         ),
         Div(

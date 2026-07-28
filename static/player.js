@@ -54,6 +54,50 @@
   let segmentDuration = 0;
   let playheadDragging = false;
 
+  // ---- document-wide duration estimate, for the playhead's elapsed/total
+  // labels (see docElapsedAndTotal below). Audio is generated lazily, one
+  // segment at a time -- there's no whole-document duration to know without
+  // either generating every segment upfront (slow for a long article) or
+  // estimating. Word-count-based estimate per segment, refined to the real
+  // duration as each one actually gets generated; recordRealDuration also
+  // calibrates the words/sec rate itself from that real data, so later
+  // not-yet-generated estimates get more accurate as you listen. ----
+  const DEFAULT_WORDS_PER_SECOND = 2.5; // ~150 wpm at 1.0x, typical narration pace
+  let observedBaseWordsPerSecond = null; // calibrated from the first real segment we see
+  const segmentDurationIsReal = segEls.map(() => false);
+
+  function wordCountOf(index) {
+    if (segTypes[index] === "code" || !segEls[index]) return 0;
+    return (segEls[index].textContent.match(/\S+/g) || []).length;
+  }
+
+  function estimateDuration(words) {
+    const baseWps = observedBaseWordsPerSecond || DEFAULT_WORDS_PER_SECOND;
+    return words / baseWps / speed;
+  }
+
+  const segmentDurations = segEls.map((_, i) => estimateDuration(wordCountOf(i)));
+
+  function recordRealDuration(index, realDuration) {
+    segmentDurations[index] = realDuration;
+    segmentDurationIsReal[index] = true;
+    const words = wordCountOf(index);
+    if (words > 0 && realDuration > 0) observedBaseWordsPerSecond = (words / realDuration) * speed;
+  }
+
+  function recomputeEstimatesForCurrentSpeed() {
+    for (let i = 0; i < segmentDurations.length; i++) {
+      if (!segmentDurationIsReal[i]) segmentDurations[i] = estimateDuration(wordCountOf(i));
+    }
+  }
+
+  function docElapsedAndTotal(withinSegElapsed) {
+    let elapsedBefore = 0;
+    for (let i = 0; i < currentSegment; i++) elapsedBefore += segmentDurations[i] || 0;
+    const total = segmentDurations.reduce((a, b) => a + (b || 0), 0);
+    return { elapsed: elapsedBefore + Math.max(0, withinSegElapsed), total };
+  }
+
   function getAudioContext() {
     if (!audioCtx || audioCtx.state === "closed") {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -107,6 +151,7 @@
         const timings = await timingsResp.json();
         const audioBuffer = await getAudioContext().decodeAudioData(arrayBuffer);
         cacheMap.set(index, { buffer: audioBuffer, wordTimings: timings.word_timings, duration: timings.duration });
+        recordRealDuration(index, timings.duration);
       } catch (e) {
         console.error(`TTS error for segment ${index}:`, e);
       } finally {
@@ -236,14 +281,23 @@
   const playheadElapsedEl = document.getElementById("playhead-elapsed");
   const playheadDurationEl = document.getElementById("playhead-duration");
 
-  function updatePlayheadUI(elapsed, duration) {
+  // The seek bar itself still represents position *within the current
+  // segment* (0..withinSegDuration) -- that's the only thing dragging it
+  // actually controls (see seekWithinSegment). The elapsed/duration text
+  // labels are document-wide (docElapsedAndTotal), deliberately a different
+  // scale than the bar next to them: seeking anywhere in the whole document
+  // instantly would mean generating audio for a not-yet-heard sentence on
+  // the spot, a real latency tradeoff -- see LEARNINGS.md.
+  function updatePlayheadUI(withinSegElapsed, withinSegDuration) {
     if (!playheadSeek) return;
-    playheadDurationEl.textContent = formatTime(duration);
-    playheadSeek.max = String(duration || 0);
-    playheadSeek.disabled = !duration;
+    playheadSeek.max = String(withinSegDuration || 0);
+    playheadSeek.disabled = !withinSegDuration;
+
+    const { elapsed, total } = docElapsedAndTotal(withinSegElapsed);
+    playheadDurationEl.textContent = formatTime(total);
     if (playheadDragging) return; // don't fight the user's own drag position
     playheadElapsedEl.textContent = formatTime(elapsed);
-    playheadSeek.value = String(elapsed);
+    playheadSeek.value = String(withinSegElapsed);
   }
 
   function tickPlayhead() {
@@ -260,7 +314,8 @@
       playheadSeek.addEventListener(evt, () => { playheadDragging = true; });
     });
     playheadSeek.addEventListener("input", () => {
-      playheadElapsedEl.textContent = formatTime(parseFloat(playheadSeek.value));
+      const { elapsed } = docElapsedAndTotal(parseFloat(playheadSeek.value));
+      playheadElapsedEl.textContent = formatTime(elapsed);
     });
     playheadSeek.addEventListener("change", () => {
       playheadDragging = false;
@@ -414,6 +469,17 @@
     startSession(index);
   }
 
+  // Every previously-recorded *real* segment duration was measured at the
+  // old voice/speed and no longer applies (a different voice/speed produces
+  // different actual durations) -- back every segment out to a fresh
+  // estimate along with the audio cache itself, rather than leaving stale
+  // real numbers in the document-wide total.
+  function resetDurationEstimates() {
+    for (let i = 0; i < segmentDurations.length; i++) segmentDurationIsReal[i] = false;
+    observedBaseWordsPerSecond = null;
+    recomputeEstimatesForCurrentSpeed();
+  }
+
   function setSpeed(newSpeed) {
     speed = newSpeed;
     cacheMap.clear();
@@ -423,6 +489,7 @@
     // fetchSegment() call right after this always starts a new request instead of
     // awaiting the stale one).
     pending.clear();
+    resetDurationEstimates();
     document.querySelectorAll(".speed-btn").forEach((b) => {
       b.classList.toggle("active", parseFloat(b.dataset.speed) === speed);
     });
@@ -438,6 +505,7 @@
     // fetchSegment() call right after this always starts a new request instead of
     // awaiting the stale one).
     pending.clear();
+    resetDurationEstimates();
     if (playing && currentSegment >= 0) startSession(currentSegment);
   }
 
