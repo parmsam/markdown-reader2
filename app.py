@@ -88,7 +88,7 @@ def get_favicon_ico():
 # ---------------------------------------------------------------- library
 
 @app.get("/")
-def get_library(request: Request):
+def get_library(request: Request, notice: str = ""):
     # Only worth showing when browsing from the same machine -- if you're
     # already on another device's browser you're already using the LAN URL.
     lan_url = None
@@ -96,7 +96,7 @@ def get_library(request: Request):
         lan_ip = _get_lan_ip()
         if lan_ip:
             lan_url = f"http://{lan_ip}:{PORT}"
-    return comp.library_page(db.list_articles(DB), lan_url=lan_url)
+    return comp.library_page(db.list_articles(DB), lan_url=lan_url, notice=notice)
 
 
 @app.get("/add")
@@ -114,21 +114,21 @@ def get_add(url: str = "", text: str = "", error: str = "", autofetch: bool = Fa
         m = re.search(r"https?://\S+", text)
         if m:
             url = m.group(0)
-    return comp.add_article_page(url=url, error=error, autofetch=autofetch)
+    return comp.add_article_page(url=url, error=error, autofetch=autofetch, folders=db.list_folders(DB))
 
 
 @app.post("/articles")
-def post_article(title: str = "", markdown: str = ""):
+def post_article(title: str = "", markdown: str = "", folder: str = ""):
     markdown = markdown.strip()
     if not markdown:
         return RedirectResponse("/add", status_code=303)
     final_title = title.strip() or _derive_title(markdown, "Untitled")
-    article = db.create_article(DB, title=final_title, markdown=markdown, source_type="paste")
+    article = db.create_article(DB, title=final_title, markdown=markdown, source_type="paste", folder=folder)
     return RedirectResponse(f"/article/{article.id}", status_code=303)
 
 
 @app.post("/articles/url")
-def post_article_url(url: str = "", use_page_title: bool = False):
+def post_article_url(url: str = "", use_page_title: bool = False, folder: str = ""):
     url = url.strip()
     if not url:
         return RedirectResponse("/add", status_code=303)
@@ -150,35 +150,28 @@ def post_article_url(url: str = "", use_page_title: bool = False):
 
     final_title = (page_title.strip() if use_page_title else "") or _derive_title(markdown, page_title.strip() or "Untitled")
     article = db.create_article(
-        DB, title=final_title, markdown=markdown, source_type="url", original_filename=url,
+        DB, title=final_title, markdown=markdown, source_type="url", original_filename=url, folder=folder,
     )
     return RedirectResponse(f"/article/{article.id}", status_code=303)
 
 
-@app.post("/articles/upload")
-async def post_article_upload(request: Request):
-    form = await request.form()
-    upload = form.get("file")
-    if upload is None or not getattr(upload, "filename", None):
-        return RedirectResponse("/add", status_code=303)
-
-    filename = upload.filename
+def _create_article_from_upload(filename: str, raw: bytes, *, folder: str | None, use_filename_as_title: bool):
+    """Shared by the single-file and folder-upload routes below: turns one
+    uploaded file's bytes into a library article, or returns None if its
+    extension isn't one of the supported types (caller decides what that
+    means -- redirect back for a single file, just skip it for a folder)."""
     suffix = Path(filename).suffix.lower()
-    raw = await upload.read()
-    # Unchecked checkboxes submit no field at all, so absence means "off".
-    use_filename_as_title = "use_filename_as_title" in form
+    stem = Path(filename).stem
 
     def _title_for(markdown: str) -> str:
-        stem = Path(filename).stem
         return stem if use_filename_as_title else _derive_title(markdown, stem)
 
     if suffix in (".md", ".markdown", ".txt"):
         markdown = raw.decode("utf-8", errors="replace")
-        article = db.create_article(
+        return db.create_article(
             DB, title=_title_for(markdown),
-            markdown=markdown, source_type="markdown_file", original_filename=filename,
+            markdown=markdown, source_type="markdown_file", original_filename=filename, folder=folder,
         )
-        return RedirectResponse(f"/article/{article.id}", status_code=303)
 
     if suffix == ".pdf":
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
@@ -191,15 +184,99 @@ async def post_article_upload(request: Request):
 
         article = db.create_article(
             DB, title=_title_for(markdown),
-            markdown=markdown, source_type="pdf", original_filename=filename,
+            markdown=markdown, source_type="pdf", original_filename=filename, folder=folder,
         )
         if pdf_ingest.KEEP_ORIGINAL_PDFS:
             pdf_path = db.DATA_DIR / "pdfs" / f"{article.id}.pdf"
             pdf_path.write_bytes(raw)
             db.set_pdf_path(DB, article.id, str(pdf_path))
-        return RedirectResponse(f"/article/{article.id}", status_code=303)
+        return article
 
-    return RedirectResponse("/add", status_code=303)
+    return None
+
+
+@app.post("/articles/upload")
+async def post_article_upload(request: Request):
+    form = await request.form()
+    upload = form.get("file")
+    if upload is None or not getattr(upload, "filename", None):
+        return RedirectResponse("/add", status_code=303)
+
+    filename = upload.filename
+    raw = await upload.read()
+    # Unchecked checkboxes submit no field at all, so absence means "off".
+    use_filename_as_title = "use_filename_as_title" in form
+    folder = form.get("folder") or ""
+
+    article = _create_article_from_upload(filename, raw, folder=folder, use_filename_as_title=use_filename_as_title)
+    if article is None:
+        return RedirectResponse("/add", status_code=303)
+    return RedirectResponse(f"/article/{article.id}", status_code=303)
+
+
+@app.post("/articles/upload-folder")
+async def post_articles_upload_folder(request: Request):
+    # Files come from a <input type=file webkitdirectory multiple>, but a
+    # plain native form submission of that input does NOT expose each file's
+    # webkitRelativePath (a JS-only File property) to the server -- only its
+    # bare basename ends up in the multipart filename. So static/upload.js
+    # submits this one via fetch()+FormData instead, explicitly setting each
+    # part's filename to file.webkitRelativePath (FormData.append's filename
+    # argument), which *is* preserved through to Starlette's UploadFile.filename
+    # here -- e.g. "MyNotes/sub/note.md" -- letting us rebuild the folder
+    # structure the user actually picked rather than dumping everything flat.
+    form = await request.form()
+    uploads = form.getlist("file")
+    # Optional: replaces the picked folder's own top-level name in every
+    # resulting path (e.g. importing "MyNotes" *into* an existing "Reference"
+    # folder) while preserving whatever nesting was under it. Left blank, the
+    # picked folder's own name is kept as-is.
+    folder_prefix = db.normalize_folder(form.get("folder_prefix") or "")
+
+    created = 0
+    skipped = []
+    for upload in uploads:
+        filename = getattr(upload, "filename", None)
+        if not filename:
+            continue
+        parts = Path(filename).parts
+        dir_parts, basename = parts[:-1], parts[-1]
+        if folder_prefix is not None and dir_parts:
+            dir_parts = tuple(folder_prefix.split("/")) + dir_parts[1:]
+        folder = "/".join(dir_parts) if dir_parts else folder_prefix
+
+        raw = await upload.read()
+        article = _create_article_from_upload(basename, raw, folder=folder, use_filename_as_title=True)
+        if article is None:
+            skipped.append(basename)
+        else:
+            created += 1
+
+    if created == 0:
+        return RedirectResponse(
+            f"/add?error={quote('No supported files (.md/.markdown/.txt/.pdf) found in that folder.')}",
+            status_code=303,
+        )
+    notice = f"Imported {created} article{'s' if created != 1 else ''}"
+    if skipped:
+        notice += f" ({len(skipped)} file{'s' if len(skipped) != 1 else ''} skipped, unsupported type)"
+    notice += "."
+    return RedirectResponse(f"/?notice={quote(notice)}", status_code=303)
+
+
+@app.post("/article/{article_id}/move")
+def post_article_move(article_id: int, folder: str = ""):
+    article = db.get_article(DB, article_id)
+    if article is None:
+        return Response("Not found", status_code=404)
+    db.set_article_folder(DB, article_id, folder)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/folders/rename")
+def post_folder_rename(old_path: str = "", new_path: str = ""):
+    db.rename_folder(DB, old_path, new_path)
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/article/{article_id}")

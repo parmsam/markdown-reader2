@@ -54,6 +54,7 @@ def get_db(path: str | Path = DB_PATH) -> Database:
             "source_type": str,           # "paste" | "markdown_file" | "pdf" | "url"
             "original_filename": str,     # also holds the source URL when source_type == "url"
             "pdf_path": str,
+            "folder": str,                # "/"-joined path ("Notes/Work"), None/"" = no folder
             "created_at": str,
             "updated_at": str,
             "last_segment_index": int,    # -1 = no progress yet
@@ -63,6 +64,13 @@ def get_db(path: str | Path = DB_PATH) -> Database:
         pk="id",
         if_not_exists=True,
     )
+    # `if_not_exists=True` above only creates the table on a first run --
+    # it doesn't add new columns to an already-existing one (this app has no
+    # migration framework), so an existing data/library.db from before the
+    # "folder" column existed needs it added explicitly.
+    articles = db.t.articles
+    if "folder" not in {c.name for c in articles.columns}:
+        articles.add_column("folder", str)
     return db
 
 
@@ -77,6 +85,18 @@ def get_articles_table(db: Database):
     return articles
 
 
+def normalize_folder(folder: str | None) -> str | None:
+    """Normalize a "/"-joined folder path: trims whitespace around each
+    segment, drops empty segments (so leading/trailing/repeated slashes and
+    stray spaces around "/" collapse away), and returns None for an empty or
+    root path -- the one canonical form `folder` is ever stored/compared in."""
+    if not folder:
+        return None
+    segments = [s.strip() for s in folder.split("/")]
+    segments = [s for s in segments if s]
+    return "/".join(segments) if segments else None
+
+
 def create_article(
     db: Database,
     *,
@@ -85,6 +105,7 @@ def create_article(
     source_type: str,
     original_filename: str | None = None,
     pdf_path: str | None = None,
+    folder: str | None = None,
 ) -> "Article":
     articles = get_articles_table(db)
     markdown = normalize_newlines(markdown)
@@ -96,12 +117,51 @@ def create_article(
         source_type=source_type,
         original_filename=original_filename,
         pdf_path=pdf_path,
+        folder=normalize_folder(folder),
         created_at=now,
         updated_at=now,
         last_segment_index=-1,
         last_voice=None,
         last_speed=None,
     )
+
+
+def list_folders(db: Database) -> list[str]:
+    """Distinct folder paths currently in use, sorted. Folders only exist
+    implicitly via articles' `folder` field (no separate folders table), so
+    one that's lost all its articles (moved or deleted) simply stops
+    appearing -- there's nothing further to clean up."""
+    articles = get_articles_table(db)
+    folders = {row["folder"] for row in articles.rows if row["folder"]}
+    return sorted(folders)
+
+
+def set_article_folder(db: Database, article_id: int, folder: str | None) -> None:
+    articles = get_articles_table(db)
+    articles.update({"folder": normalize_folder(folder)}, article_id)
+
+
+def rename_folder(db: Database, old_path: str, new_path: str) -> int:
+    """Rename a folder, cascading to every descendant sub-folder path too
+    (e.g. renaming "Notes" to "Journal" also turns "Notes/Work" into
+    "Journal/Work"). Returns the number of articles updated."""
+    old_path = normalize_folder(old_path)
+    new_path = normalize_folder(new_path)
+    if not old_path or not new_path or old_path == new_path:
+        return 0
+    articles = get_articles_table(db)
+    updated = 0
+    for row in list(articles.rows):
+        folder = row["folder"]
+        if folder == old_path:
+            new_folder = new_path
+        elif folder and folder.startswith(old_path + "/"):
+            new_folder = new_path + folder[len(old_path):]
+        else:
+            continue
+        articles.update({"folder": new_folder}, row["id"])
+        updated += 1
+    return updated
 
 
 def list_articles(db: Database) -> list["Article"]:

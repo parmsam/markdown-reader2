@@ -31,6 +31,9 @@ the architecture and `LEARNINGS.md` for the design decisions behind it.
   everything is saved to a local SQLite database and stays there across
   restarts. Add-by-URL can also be triggered by sharing a link straight from
   your phone's Share Sheet, see "Mobile: home screen + sharing links in" below
+- Organize articles into folders (nested, e.g. `Notes/Work`) -- move one from
+  its library-row dropdown, tag one on the way in from any "Add an article"
+  form, or upload a whole folder at once (subfolder structure preserved)
 - Generated audio is cached to disk, so replaying an article (from the same
   device or another one on your network) is instant after the first listen
 - Reading progress (segment position, voice, speed) is saved server-side per

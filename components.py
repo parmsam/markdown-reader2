@@ -8,9 +8,9 @@ from __future__ import annotations
 import time
 
 from fasthtml.common import (
-    A, Audio, Body, Blockquote, Button, Details, Div, Form, H1, H2, Head, Html,
-    Img, Input, Label, Link, Main, Meta, NotStr, Nav, Option, P, Script, Select,
-    Span, Style, Summary, Textarea, Title,
+    A, Audio, Body, Blockquote, Button, Datalist, Details, Div, Form, H1, H2,
+    Head, Html, Img, Input, Label, Link, Main, Meta, NotStr, Nav, Option, P,
+    Script, Select, Span, Style, Summary, Textarea, Title,
 )
 
 from tts import VOICES, DEFAULT_VOICE, DEFAULT_SPEED
@@ -119,7 +119,58 @@ def _nav():
     )
 
 
-def library_page(articles: list, lan_url: str | None = None) -> Html:
+def _build_folder_tree(articles: list) -> tuple[list, dict]:
+    """Split articles into (root_articles, tree): root_articles have no
+    folder (rendered directly, unlabeled -- so a library that's never used
+    folders looks exactly like it did before this feature existed); tree is
+    a nested dict keyed by path segment, {"path": "A/B", "articles": [...],
+    "children": {...}}, one level per "/" in `folder`. There's no separate
+    folders table (see db.py's list_folders docstring), so this tree is
+    rebuilt from the articles' own `folder` values every render -- cheap at
+    personal-library scale, and it means a folder can never exist here
+    without also being reachable via at least one real article."""
+    root_articles = []
+    tree: dict = {}
+    for a in articles:
+        if not a.folder:
+            root_articles.append(a)
+            continue
+        level = tree
+        node = None
+        path_so_far = []
+        for seg in a.folder.split("/"):
+            path_so_far.append(seg)
+            node = level.setdefault(seg, {"path": "/".join(path_so_far), "articles": [], "children": {}})
+            level = node["children"]
+        node["articles"].append(a)
+    return root_articles, tree
+
+
+def _count_descendants(children: dict) -> int:
+    return sum(len(n["articles"]) + _count_descendants(n["children"]) for n in children.values())
+
+
+def _render_folder_node(name: str, node: dict, all_folders: list[str]) -> Details:
+    total = len(node["articles"]) + _count_descendants(node["children"])
+    rows = [_article_row(a, all_folders) for a in node["articles"]]
+    children = [
+        _render_folder_node(child_name, child, all_folders)
+        for child_name, child in sorted(node["children"].items())
+    ]
+    return Details(
+        Summary(
+            Span(f"\U0001F4C1 {name}", cls="folder-name"),
+            Span(f"({total})", cls="folder-count"),
+            Button("Rename", type="button", cls="btn btn-sm folder-rename-btn", data_folder_path=node["path"]),
+        ),
+        Div(*rows, cls="article-list") if rows else "",
+        *children,
+        open=True,
+        cls="folder-group",
+    )
+
+
+def library_page(articles: list, lan_url: str | None = None, notice: str | None = None) -> Html:
     if not articles:
         body = Div(
             P("Your library is empty."),
@@ -127,8 +178,13 @@ def library_page(articles: list, lan_url: str | None = None) -> Html:
             cls="empty-state",
         )
     else:
-        rows = [_article_row(a) for a in articles]
-        body = Div(*rows, cls="article-list")
+        all_folders = sorted({a.folder for a in articles if a.folder})
+        root_articles, tree = _build_folder_tree(articles)
+        parts = []
+        if root_articles:
+            parts.append(Div(*[_article_row(a, all_folders) for a in root_articles], cls="article-list"))
+        parts.extend(_render_folder_node(name, node, all_folders) for name, node in sorted(tree.items()))
+        body = Div(*parts)
 
     # Only rendered when app.py detects the request came from localhost --
     # the point is giving you something to copy onto another device (phone,
@@ -143,10 +199,11 @@ def library_page(articles: list, lan_url: str | None = None) -> Html:
         )
         if lan_url else ""
     )
+    notice_banner = Div(notice, cls="notice-banner") if notice else ""
 
     return Html(
         _head(f"Library — {APP_NAME}"),
-        Body(_nav(), Main(H1("Library"), lan_banner, body, cls="container")),
+        Body(_nav(), Main(H1("Library"), lan_banner, notice_banner, body, cls="container")),
     )
 
 
@@ -160,7 +217,20 @@ def _source_label(a):
     return Span(a.original_filename, cls="article-filename")
 
 
-def _article_row(a) -> Div:
+def _folder_move_form(a, all_folders: list[str]) -> Form:
+    options = [Option("— No folder —", value="", selected=not a.folder)]
+    options += [Option(f, value=f, selected=(a.folder == f)) for f in all_folders]
+    options.append(Option("+ New folder…", value="__new__"))
+    return Form(
+        Select(*options, cls="folder-select", title="Move to folder"),
+        Input(type="hidden", name="folder", value=a.folder or ""),
+        method="post",
+        action=f"/article/{a.id}/move",
+        cls="folder-move-form",
+    )
+
+
+def _article_row(a, all_folders: list[str] | None = None) -> Div:
     resume_pct = ""
     if a.last_segment_index is not None and a.last_segment_index >= 0:
         resume_pct = Span("in progress", cls="badge badge-progress")
@@ -174,6 +244,7 @@ def _article_row(a) -> Div:
             cls="article-row-main",
         ),
         Div(
+            _folder_move_form(a, all_folders or []),
             Span(a.created_at[:10] if a.created_at else "", cls="article-date"),
             Button(
                 "Delete",
@@ -186,7 +257,15 @@ def _article_row(a) -> Div:
     )
 
 
-def add_article_page(url: str = "", error: str = "", autofetch: bool = False) -> Html:
+def _folder_field() -> Label:
+    return Label(
+        "Folder (optional)",
+        Input(name="folder", type="text", list="folder-datalist", placeholder="e.g. Notes/Work"),
+    )
+
+
+def add_article_page(url: str = "", error: str = "", autofetch: bool = False, folders: list[str] | None = None) -> Html:
+    folder_datalist = Datalist(*[Option(value=f) for f in (folders or [])], id="folder-datalist")
     url_form = Form(
         Label(
             "Page URL",
@@ -202,6 +281,7 @@ def add_article_page(url: str = "", error: str = "", autofetch: bool = False) ->
             " Use the page's title",
             cls="checkbox-label",
         ),
+        _folder_field(),
         Button("Fetch & add", type="submit", cls="btn btn-primary"),
         P(
             "Fetched with defuddle.md, falling back to Jina AI's reader if that fails.",
@@ -215,6 +295,7 @@ def add_article_page(url: str = "", error: str = "", autofetch: bool = False) ->
     paste_form = Form(
         Label("Title (optional)", Input(name="title", type="text", placeholder="Derived from content if left blank")),
         Label("Markdown", Textarea(name="markdown", rows=16, placeholder="Paste or write markdown here...", required=True)),
+        _folder_field(),
         Button("Add to library", type="submit", cls="btn btn-primary"),
         method="post",
         action="/articles",
@@ -235,10 +316,38 @@ def add_article_page(url: str = "", error: str = "", autofetch: bool = False) ->
             " Use file name as title",
             cls="checkbox-label",
         ),
+        _folder_field(),
         Button("Upload", type="submit", cls="btn btn-primary"),
         method="post",
         action="/articles/upload",
         enctype="multipart/form-data",
+        cls="add-form",
+    )
+    folder_upload_form = Form(
+        Label(
+            "Folder",
+            Div(
+                Input(name="folder_files", type="file", webkitdirectory=True, multiple=True, required=True, id="folder-upload-input"),
+                Span("Tap to choose a folder", cls="file-drop-hint"),
+                Span("", cls="file-drop-name", hidden=True),
+                cls="file-dropzone",
+            ),
+        ),
+        Label(
+            "Folder name in library (optional)",
+            Input(name="folder_prefix", type="text", list="folder-datalist", id="folder-prefix-input",
+                  placeholder="Auto-filled from the picked folder's name"),
+        ),
+        Button("Upload folder", type="submit", cls="btn btn-primary"),
+        P(
+            "Subfolders are preserved. Unsupported files (anything but "
+            ".md/.markdown/.txt/.pdf) are skipped.",
+            cls="form-hint",
+        ),
+        method="post",
+        action="/articles/upload-folder",
+        enctype="multipart/form-data",
+        id="folder-upload-form",
         cls="add-form",
     )
     error_banner = Div(error, cls="add-error") if error else ""
@@ -255,9 +364,11 @@ def add_article_page(url: str = "", error: str = "", autofetch: bool = False) ->
             Main(
                 H1("Add an article"),
                 error_banner,
+                folder_datalist,
                 Details(Summary("Add from a link"), url_form, open=True),
                 Details(Summary("Paste markdown"), paste_form, open=not url),
                 Details(Summary("Upload a file"), upload_form),
+                Details(Summary("Upload a folder"), folder_upload_form),
                 cls="container",
             ),
             autofetch_script,

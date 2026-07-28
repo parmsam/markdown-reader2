@@ -348,3 +348,47 @@ place still naively mapping "one line -> one segment" 1:1, which is exactly
 where multi-line items broke. When adding a new per-item block type, group
 into logical items *first*, then segment each -- don't assume a source
 line is a reasonable unit on its own.
+
+## Folders: a path string on each article, not a folders table
+
+`articles.folder` is a single nullable TEXT column holding a "/"-joined path
+("Notes/Work"), not a foreign key into a separate `folders` table with
+parent/child rows. This means a folder only exists at all by virtue of at
+least one article currently pointing at that path -- `db.list_folders()`
+just does `SELECT DISTINCT folder`, and `library_page`'s nested `<details>`
+tree (`_build_folder_tree`) is rebuilt from that on every render. The
+tradeoff: an empty folder can't be "kept around" with zero articles in it
+(there's nothing to persist it), and `rename_folder()` has to walk and
+rewrite every affected article's `folder` column (a prefix-match update)
+rather than changing one row. Chosen anyway because it needed no schema
+beyond one column, no join to compute a library listing, and "empty folder
+you're deliberately keeping around for later" isn't something this app's
+actual use case (organizing articles you already have) needs.
+
+Existing `data/library.db` files predate this column, and this app has no
+migration framework -- `db.get_db()` checks `articles.columns` and calls
+`.add_column("folder", str)` itself if missing, rather than assuming
+`if_not_exists=True` on `.create()` (which only handles a table not existing
+yet at all, never a column added to one that already does).
+
+## Folder upload: relative paths only survive a hand-built multipart request
+
+`<input type=file webkitdirectory multiple>` gives the browser's JS each
+picked file's directory location via `file.webkitRelativePath`
+("MyNotes/sub/note.md") -- but that's a JS-only File property. A plain
+`<form>` submission of that input sends the server only each file's bare
+basename in the multipart Content-Disposition filename; the relative path
+never crosses the wire. static/upload.js's folder-upload handler works
+around this by intercepting the form's `submit`, building the `FormData` by
+hand, and passing `file.webkitRelativePath` as `FormData.append`'s third
+(filename-override) argument for every file -- that value *is* preserved
+through to Starlette's `UploadFile.filename` server-side, which
+`post_articles_upload_folder` (app.py) then splits back into directory path
++ basename to reconstruct the folder structure.
+
+**Lesson:** if a file input's metadata beyond the raw bytes matters
+server-side (relative path, capture timestamp, whatever), check whether a
+plain native form submission actually transmits it before building UI
+around the assumption that it does -- several File/`<input>` properties are
+JS-visible-only and need an explicit fetch()+FormData workaround to reach
+the server at all.
