@@ -84,6 +84,17 @@ def _head(title: str):
         Title(title),
         Link(rel="icon", type="image/svg+xml", href=f"/static/favicon.svg?v={_STATIC_VERSION}"),
         Link(rel="apple-touch-icon", href=f"/static/apple-touch-icon.png?v={_STATIC_VERSION}"),
+        # Web App Manifest (name/icons/display/share_target) -- Android's
+        # equivalent of the apple-touch-icon/apple-mobile-web-app-* pair
+        # below, plus what lets "Add to Home Screen" register this app as a
+        # native Share Target (see README's "Share from your phone").
+        Link(rel="manifest", href=f"/static/manifest.json?v={_STATIC_VERSION}"),
+        # Address-bar/status-bar tint. Static default here for pre-JS paint;
+        # theme.js keeps this in sync with the effective (system or manually
+        # toggled) theme afterward.
+        Meta(name="theme-color", id="theme-color-meta", content="#ffffff"),
+        Meta(name="apple-mobile-web-app-capable", content="yes"),
+        Meta(name="apple-mobile-web-app-title", content=APP_NAME),
         Link(rel="stylesheet", href=f"/static/style.css?v={_STATIC_VERSION}"),
         Script(src=f"/static/player.js?v={_STATIC_VERSION}", defer=True),
         Script(src=f"/static/library.js?v={_STATIC_VERSION}", defer=True),

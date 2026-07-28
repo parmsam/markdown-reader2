@@ -29,8 +29,8 @@ the architecture and `LEARNINGS.md` for the design decisions behind it.
   PDF (converted to markdown via marker-pdf), or add a web page by URL
   (fetched clean via defuddle.md, falling back to Jina AI's reader) --
   everything is saved to a local SQLite database and stays there across
-  restarts. Add-by-URL can also be triggered from an iOS Shortcut in the
-  Share Sheet, see "Share from iOS" below
+  restarts. Add-by-URL can also be triggered by sharing a link straight from
+  your phone's Share Sheet, see "Mobile: home screen + sharing links in" below
 - Generated audio is cached to disk, so replaying an article (from the same
   device or another one on your network) is instant after the first listen
 - Reading progress (segment position, voice, speed) is saved server-side per
@@ -96,14 +96,41 @@ Hugging Face and creates a `data/` directory (gitignored) containing:
 - `data/pdfs/` -- retained original PDF uploads
 - `data/audio_cache/` -- generated speech audio, cached per article/segment/voice/speed
 
-## Share from iOS
+## Mobile: home screen + sharing links in
 
-You can add articles by pasting/uploading in the browser (see "Add an
-article"), or by handing a link straight from any app's Share Sheet to your
-library -- iOS Safari doesn't support the Web Share Target API PWAs use for
-this on Android, so the practical equivalent is a small iOS Shortcut that
-opens `/add?url=...&autofetch=1` (prefills the URL and submits it
-automatically, landing you straight on the finished article):
+This app is a valid installable [Web App Manifest](static/manifest.json)
+(name, icons, `display: standalone`) -- on both iOS and Android you can add
+it to your home screen and launch it full-screen, no browser chrome. Sharing
+a link from any other app straight into your library works on both
+platforms, but gets there differently:
+
+### Android
+
+Android's Chrome supports the [Web Share Target
+API](https://developer.chrome.com/docs/capabilities/web-apis/web-share-target)
+natively, no extra setup:
+
+1. Open the LAN URL in Chrome, tap the **⋮** menu -> **Add to Home screen** /
+   **Install app**.
+2. From then on, Lector shows up as a share target -- share a link from any
+   app (browser, a social app, etc.) -> **Lector**, and it opens straight to
+   the finished article (`static/manifest.json`'s `share_target` points at
+   `/add?autofetch=1`, which fetches and adds with no extra taps; `/add` also
+   handles apps that put the shared link in a free-text field rather than a
+   dedicated URL field).
+
+**Caveat:** Chrome's install/share-target machinery generally requires a
+secure context (HTTPS, or `localhost`). Served over plain HTTP on your LAN,
+some Chrome versions may not offer the full install prompt or register the
+share target -- if so, a plain bookmark to the LAN URL still works fine, just
+without native sharing. Getting HTTPS working on the LAN is a separate,
+bigger change (self-signed cert + trusting it on each device).
+
+### iOS
+
+iOS Safari doesn't support the Web Share Target API, so the practical
+equivalent is a small Shortcut that opens `/add?url=...&autofetch=1`
+(prefills the URL and submits it automatically):
 
 1. Open the **Shortcuts** app -> **+** to create a new shortcut.
 2. Add action **Get URLs from Input** (so it works whether the share sheet

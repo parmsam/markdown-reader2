@@ -7,9 +7,14 @@
   "use strict";
 
   const STORAGE_KEY = "theme";
+  // Mirrors style.css's --bg for light/dark -- keeps the browser's address
+  // bar / status bar tint (Android Chrome, and standalone-mode iOS) in sync
+  // with the effective theme, since a <meta name="theme-color"> can't
+  // itself react to our data-theme override the way CSS custom properties do.
+  const BG_BY_THEME = { light: "#ffffff", dark: "#16181d" };
   const root = document.documentElement;
   const btn = document.getElementById("theme-toggle");
-  if (!btn) return;
+  const themeColorMeta = document.getElementById("theme-color-meta");
 
   function systemPrefersDark() {
     return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -21,8 +26,10 @@
     return systemPrefersDark() ? "dark" : "light";
   }
 
-  function updateIcon() {
-    btn.textContent = effectiveTheme() === "dark" ? "☀️" : "🌙";
+  function updateThemeUI() {
+    const theme = effectiveTheme();
+    if (btn) btn.textContent = theme === "dark" ? "☀️" : "🌙";
+    if (themeColorMeta) themeColorMeta.setAttribute("content", BG_BY_THEME[theme]);
   }
 
   function setTheme(theme) {
@@ -33,15 +40,17 @@
       localStorage.removeItem(STORAGE_KEY);
       root.removeAttribute("data-theme");
     }
-    updateIcon();
+    updateThemeUI();
   }
 
-  btn.addEventListener("click", () => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light") setTheme("dark");
-    else if (stored === "dark") setTheme(null);
-    else setTheme("light");
-  });
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored === "light") setTheme("dark");
+      else if (stored === "dark") setTheme(null);
+      else setTheme("light");
+    });
+  }
 
-  updateIcon();
+  updateThemeUI();
 })();

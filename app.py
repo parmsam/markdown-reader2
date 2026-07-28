@@ -100,11 +100,20 @@ def get_library(request: Request):
 
 
 @app.get("/add")
-def get_add(url: str = "", error: str = "", autofetch: bool = False):
-    # `url` (and optionally `autofetch=1`) let an iOS Shortcut in the Share Sheet
-    # hand off a shared link by opening this page directly -- see README's "Share
-    # from iOS" section. `error` round-trips a failed /articles/url attempt so the
-    # user sees why, with the URL still filled in instead of having to retype it.
+def get_add(url: str = "", text: str = "", error: str = "", autofetch: bool = False):
+    # `url` (and optionally `autofetch=1`) let a share action hand off a
+    # shared link by opening this page directly -- an iOS Shortcut in the
+    # Share Sheet (see README's "Mobile: home screen + sharing links in"), or
+    # Android's native
+    # Share Target (static/manifest.json's share_target, once this app is
+    # added to the home screen). Android apps commonly put the shared link in
+    # `text` rather than the dedicated `url` field, so fall back to pulling a
+    # URL out of that. `error` round-trips a failed /articles/url attempt so
+    # the user sees why, with the URL still filled in instead of retyping it.
+    if not url and text:
+        m = re.search(r"https?://\S+", text)
+        if m:
+            url = m.group(0)
     return comp.add_article_page(url=url, error=error, autofetch=autofetch)
 
 
