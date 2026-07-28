@@ -132,11 +132,16 @@ body {
 }
 .folder-group .folder-group { margin: 0.75rem 0 0 1.25rem; }
 .folder-group > summary {
-  display: flex; align-items: center; gap: 0.5rem; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 0.5rem; font-weight: 600; cursor: pointer; flex-wrap: wrap;
 }
 .folder-name { flex: 1; }
 .folder-count { color: var(--fg-muted); font-weight: 400; font-size: 0.85rem; }
 .folder-rename-btn { font-size: 0.75rem !important; padding: 0.2rem 0.5rem !important; }
+.folder-sort-form { display: inline-flex; }
+.folder-sort-select {
+  background: var(--surface); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.2rem 0.4rem; font-size: 0.75rem; max-width: 11rem;
+}
 .folder-group > .article-list { margin-top: 0.75rem; }
 .badge {
   font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em;

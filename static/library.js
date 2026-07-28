@@ -121,4 +121,16 @@
 
   const sortSelect = document.getElementById("sort-select");
   if (sortSelect) sortSelect.addEventListener("change", () => sortSelect.form.submit());
+
+  // Per-folder sort <select>, lives in a folder's <summary> just like the
+  // Rename/Delete buttons -- same reason for the click guard: any click
+  // inside a <summary> (including one to open this dropdown) otherwise also
+  // toggles the <details> open/closed.
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".folder-sort-select")) e.preventDefault();
+  });
+  document.addEventListener("change", (e) => {
+    const select = e.target.closest(".folder-sort-select");
+    if (select) select.form.submit();
+  });
 })();

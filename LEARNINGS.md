@@ -467,3 +467,37 @@ version of this same player showed the identical stall when tested in the
 same session. When live audio timing can't be exercised, verify the pure
 calculation logic in isolation (a plain Node script reimplementing the
 formulas, no browser needed) instead of concluding the feature is broken.
+
+## Per-folder sort: inherited by default, one SQL query isn't enough
+
+Each folder can now have its own sort, independent of its siblings, that
+falls back to its nearest ancestor's own sort (and ultimately the global
+"Sort by") when unset -- not "every folder defaults to the global setting,"
+but a real inheritance chain, so setting a parent folder's sort also affects
+any child that hasn't overridden it itself.
+
+Storing the override needed an actual table (`folder_sort`, path -> sort key)
+-- the first time a folder has a real row anywhere, since otherwise (per
+`list_folders`'s docstring) a folder only exists implicitly via articles'
+`folder` field. Both `rename_folder` and `delete_folder` needed the exact
+same prefix-rewrite/prefix-delete treatment already applied to articles
+extended to this table too, or a renamed/deleted folder would silently leave
+behind an orphaned override under its old path.
+
+The bigger implication: `db.list_articles(sort=...)` runs one `ORDER BY` for
+the whole library, which can only ever express *one* order -- fine when
+every folder shares the global sort, not sufficient once folders can
+disagree with each other. `components.py` now does two passes: the DB query
+still provides a reasonable default top-to-bottom order, but
+`_render_folder_node` re-sorts each folder's own direct articles in Python
+(`_sort_articles`, one function mirroring `db.py`'s `SORT_OPTIONS` per
+criterion) using that folder's own *effective* (inherited-or-overridden)
+sort, and passes that effective sort down as the inherited default for its
+children. Folder ordering among siblings uses the same effective-sort value
+at whatever level they're siblings at, via the already-existing
+`_sorted_folder_entries`.
+
+**Lesson:** "sort the whole page" and "let different parts of the page sort
+independently" are different enough problems that the second one usually
+can't be satisfied by parameterizing the same one-query mechanism the first
+one uses -- it needs its own pass over already-fetched data instead.

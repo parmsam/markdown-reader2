@@ -96,7 +96,10 @@ def get_library(request: Request, notice: str = "", sort: str = db.DEFAULT_SORT)
         lan_ip = _get_lan_ip()
         if lan_ip:
             lan_url = f"http://{lan_ip}:{PORT}"
-    return comp.library_page(db.list_articles(DB, sort=sort), lan_url=lan_url, notice=notice, sort=sort)
+    return comp.library_page(
+        db.list_articles(DB, sort=sort), lan_url=lan_url, notice=notice, sort=sort,
+        folder_sort_overrides=db.get_folder_sort_overrides(DB),
+    )
 
 
 @app.get("/add")
@@ -284,6 +287,17 @@ def post_folder_delete(path: str = ""):
     count = db.delete_folder(DB, path)
     notice = f"Removed folder \"{path}\" -- {count} article{'s' if count != 1 else ''} moved back to the library root."
     return RedirectResponse(f"/?notice={quote(notice)}", status_code=303)
+
+
+@app.post("/folders/sort")
+def post_folder_sort(folder: str = "", sort: str = ""):
+    # Empty/"inherit" clears the override -- back to inheriting from the
+    # nearest ancestor's own sort, or ultimately the global "Sort by".
+    if not sort or sort == "inherit":
+        db.clear_folder_sort(DB, folder)
+    else:
+        db.set_folder_sort(DB, folder, sort)
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/article/{article_id}")

@@ -181,17 +181,52 @@ def _sorted_folder_entries(items, sort: str) -> list:
     )
 
 
-def _render_folder_node(name: str, node: dict, all_folders: list[str], sort: str) -> Details:
+def _sort_articles(articles: list, sort: str) -> list:
+    """Python-side equivalent of db.py's SORT_OPTIONS, since a single SQL
+    query can't give different folders different orders -- this is what
+    lets each folder's *own* effective sort (inherited or overridden, see
+    _render_folder_node) actually take effect on its direct articles."""
+    if sort == "title_asc":
+        return sorted(articles, key=lambda a: (a.title or "").lower())
+    if sort == "title_desc":
+        return sorted(articles, key=lambda a: (a.title or "").lower(), reverse=True)
+    if sort == "oldest":
+        return sorted(articles, key=lambda a: a.created_at or "")
+    return sorted(articles, key=lambda a: a.created_at or "", reverse=True)  # "recent" (default/fallback)
+
+
+def _folder_sort_select(path: str, inherited_sort: str, overrides: dict) -> Select:
+    override = overrides.get(path)
+    inherited_label = SORT_OPTIONS.get(inherited_sort, SORT_OPTIONS[DEFAULT_SORT])[0]
+    options = [Option(f"Default ({inherited_label})", value="inherit", selected=override is None)]
+    options += [
+        Option(label, value=key, selected=(override == key))
+        for key, (label, _) in SORT_OPTIONS.items()
+    ]
+    return Select(*options, name="sort", cls="folder-sort-select", title="Sort just this folder")
+
+
+def _render_folder_node(name: str, node: dict, all_folders: list[str], inherited_sort: str, overrides: dict) -> Details:
+    # Each folder's *own* effective sort: its explicit override if it has
+    # one, else whatever it inherits from its nearest ancestor (ultimately
+    # the global "Sort by" at the root) -- passed down as `inherited_sort`
+    # for descendants that don't have their own override either.
+    my_sort = overrides.get(node["path"], inherited_sort)
     total = len(node["articles"]) + _count_descendants(node["children"])
-    rows = [_article_row(a, all_folders) for a in node["articles"]]
+    rows = [_article_row(a, all_folders) for a in _sort_articles(node["articles"], my_sort)]
     children = [
-        _render_folder_node(child_name, child, all_folders, sort)
-        for child_name, child in _sorted_folder_entries(node["children"].items(), sort)
+        _render_folder_node(child_name, child, all_folders, my_sort, overrides)
+        for child_name, child in _sorted_folder_entries(node["children"].items(), my_sort)
     ]
     return Details(
         Summary(
             Span(f"\U0001F4C1 {name}", cls="folder-name"),
             Span(f"({total})", cls="folder-count"),
+            Form(
+                _folder_sort_select(node["path"], inherited_sort, overrides),
+                Input(type="hidden", name="folder", value=node["path"]),
+                method="post", action="/folders/sort", cls="folder-sort-form",
+            ),
             Button("Rename", type="button", cls="btn btn-sm folder-rename-btn", data_folder_path=node["path"]),
             Button(
                 "Delete", type="button", cls="btn btn-sm btn-danger folder-delete-btn",
@@ -214,7 +249,11 @@ def _sort_form(sort: str) -> Form:
     )
 
 
-def library_page(articles: list, lan_url: str | None = None, notice: str | None = None, sort: str = DEFAULT_SORT) -> Html:
+def library_page(
+    articles: list, lan_url: str | None = None, notice: str | None = None,
+    sort: str = DEFAULT_SORT, folder_sort_overrides: dict | None = None,
+) -> Html:
+    folder_sort_overrides = folder_sort_overrides or {}
     if not articles:
         body = Div(
             P("Your library is empty."),
@@ -222,18 +261,21 @@ def library_page(articles: list, lan_url: str | None = None, notice: str | None 
             cls="empty-state",
         )
     else:
-        # `articles` is already ordered per `sort` (db.list_articles); folder
-        # bucketing below (_build_folder_tree) preserves that order within
-        # each bucket, so sorting applies inside every folder too, not just
-        # the root-level list. Folder *order* itself also follows `sort`
-        # (_sorted_folder_entries), recursively at every nesting depth.
+        # `articles` is already ordered per the global `sort` (db.list_articles);
+        # folder bucketing below (_build_folder_tree) preserves that order
+        # within each bucket, so it applies inside every folder too by
+        # default -- unless a folder (or an ancestor of it) has its own
+        # explicit override in `folder_sort_overrides`, in which case
+        # _render_folder_node re-sorts that folder's articles/order in
+        # Python and passes its effective sort down as the inherited
+        # default for its own children.
         all_folders = sorted({a.folder for a in articles if a.folder})
         root_articles, tree = _build_folder_tree(articles)
         parts = []
         if root_articles:
             parts.append(Div(*[_article_row(a, all_folders) for a in root_articles], cls="article-list"))
         parts.extend(
-            _render_folder_node(name, node, all_folders, sort)
+            _render_folder_node(name, node, all_folders, sort, folder_sort_overrides)
             for name, node in _sorted_folder_entries(tree.items(), sort)
         )
         body = Div(*parts)

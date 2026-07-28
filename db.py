@@ -71,6 +71,17 @@ def get_db(path: str | Path = DB_PATH) -> Database:
     articles = db.t.articles
     if "folder" not in {c.name for c in articles.columns}:
         articles.add_column("folder", str)
+
+    # Per-folder sort override (independent of the global "Sort by" and of
+    # sibling folders) -- a folder has no row of its own anywhere else (see
+    # list_folders' docstring: folders only exist implicitly via articles'
+    # `folder` field), so this is the one place a folder *does* get a real
+    # row, existing only for folders someone has explicitly overridden.
+    db.t.folder_sort.create(
+        {"folder": str, "sort": str},  # folder: full path ("Notes/Work"); sort: a SORT_OPTIONS key
+        pk="folder",
+        if_not_exists=True,
+    )
     return db
 
 
@@ -141,6 +152,31 @@ def set_article_folder(db: Database, article_id: int, folder: str | None) -> Non
     articles.update({"folder": normalize_folder(folder)}, article_id)
 
 
+def get_folder_sort_overrides(db: Database) -> dict[str, str]:
+    """Every folder path that has its own explicit sort override (as opposed
+    to inheriting one from its nearest ancestor, or ultimately the global
+    "Sort by" -- see components.py's _render_folder_node)."""
+    return {row["folder"]: row["sort"] for row in db.t.folder_sort.rows}
+
+
+def set_folder_sort(db: Database, path: str, sort: str) -> None:
+    path = normalize_folder(path)
+    if not path:
+        return
+    db.t.folder_sort.upsert({"folder": path, "sort": sort}, pk="folder")
+
+
+def clear_folder_sort(db: Database, path: str) -> None:
+    """Back to inheriting from the nearest ancestor/global default."""
+    path = normalize_folder(path)
+    if not path:
+        return
+    try:
+        db.t.folder_sort.delete(path)
+    except Exception:
+        pass  # no override existed -- already the desired state
+
+
 def delete_folder(db: Database, path: str) -> int:
     """Remove a folder (and any of its sub-folders) by clearing `folder` on
     every article inside it -- moves them back to the root library rather
@@ -159,6 +195,12 @@ def delete_folder(db: Database, path: str) -> int:
         if folder == path or (folder and folder.startswith(path + "/")):
             articles.update({"folder": None}, row["id"])
             updated += 1
+    # A deleted folder's own (and every descendant's) sort override is now
+    # meaningless -- nothing left to apply it to.
+    for row in list(db.t.folder_sort.rows):
+        p = row["folder"]
+        if p == path or p.startswith(path + "/"):
+            db.t.folder_sort.delete(p)
     return updated
 
 
@@ -182,6 +224,17 @@ def rename_folder(db: Database, old_path: str, new_path: str) -> int:
             continue
         articles.update({"folder": new_folder}, row["id"])
         updated += 1
+    # Carry any sort override(s) along with the rename, same prefix-rewrite.
+    for row in list(db.t.folder_sort.rows):
+        p = row["folder"]
+        if p == old_path:
+            new_p = new_path
+        elif p.startswith(old_path + "/"):
+            new_p = new_path + p[len(old_path):]
+        else:
+            continue
+        db.t.folder_sort.delete(p)
+        db.t.folder_sort.upsert({"folder": new_p, "sort": row["sort"]}, pk="folder")
     return updated
 
 
