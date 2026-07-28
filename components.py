@@ -251,8 +251,8 @@ def _render_folder_node(name: str, node: dict, all_folders: list[str], inherited
             Button("Rename", type="button", cls="popover-item folder-rename-btn", data_folder_path=node["path"]),
             Button(
                 "Delete", type="button", cls="popover-item popover-item-danger folder-delete-btn",
-                data_folder_path=node["path"],
-                title="Removes the folder only -- its articles move back to the library root, they aren't deleted",
+                data_folder_path=node["path"], data_folder_count=str(total),
+                title="Permanently deletes this folder's articles (and cached audio) -- cannot be undone",
             ),
             id=menu_id, popover="auto", cls="popover-menu",
         ),

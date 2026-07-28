@@ -177,31 +177,31 @@ def clear_folder_sort(db: Database, path: str) -> None:
         pass  # no override existed -- already the desired state
 
 
-def delete_folder(db: Database, path: str) -> int:
-    """Remove a folder (and any of its sub-folders) by clearing `folder` on
-    every article inside it -- moves them back to the root library rather
-    than deleting them. There's no separate "delete the articles too" path:
-    a folder is just a path string on an article (see list_folders'
-    docstring), not a real container, so "deleting" it can only ever mean
-    dissolving the grouping, never destroying content. Returns the number
-    of articles moved."""
+def get_articles_in_folder(db: Database, path: str) -> list["Article"]:
+    """Every article inside this folder or one of its sub-folders (same
+    cascading prefix match as rename_folder). Deleting a folder deletes all
+    of these too, Finder-style -- see app.py's post_folder_delete."""
     path = normalize_folder(path)
     if not path:
-        return 0
+        return []
     articles = get_articles_table(db)
-    updated = 0
-    for row in list(articles.rows):
-        folder = row["folder"]
-        if folder == path or (folder and folder.startswith(path + "/")):
-            articles.update({"folder": None}, row["id"])
-            updated += 1
-    # A deleted folder's own (and every descendant's) sort override is now
-    # meaningless -- nothing left to apply it to.
+    return [
+        a for a in articles()
+        if a.folder == path or (a.folder and a.folder.startswith(path + "/"))
+    ]
+
+
+def clear_folder_sort_overrides(db: Database, path: str) -> None:
+    """Drop this folder's (and its descendants') sort-override row(s), if
+    any -- called after deleting a folder's articles, since there's nothing
+    left for the override to apply to."""
+    path = normalize_folder(path)
+    if not path:
+        return
     for row in list(db.t.folder_sort.rows):
         p = row["folder"]
         if p == path or p.startswith(path + "/"):
             db.t.folder_sort.delete(p)
-    return updated
 
 
 def rename_folder(db: Database, old_path: str, new_path: str) -> int:

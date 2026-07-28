@@ -533,3 +533,42 @@ first (only keeps the event from reaching handlers on ancestors). Reach for
 default action on the same element you didn't mean to touch -- worth an
 isolated repro when a fix like this doesn't behave as expected, rather than
 guessing further from inside the full app.
+
+## Folder delete: reversed from "safe" (ungroup) to Finder-style (destructive)
+
+`db.delete_folder()` originally only cleared `folder` on every article
+inside the folder, moving them back to the library root -- deliberately, by
+design: since a folder is just a path string (see "Folders: a path string on
+each article" above), the reasoning was that "deleting" one could only ever
+mean dissolving the grouping, never destroying content, and the docstring
+said so explicitly.
+
+That reasoning was correct about the implementation but wrong about what
+"Delete" on a folder should mean to someone using the app: after clicking
+Delete on a real folder of 78 articles expecting them gone, the user got
+them back at the root instead -- silently no data loss, but not what "Delete"
+means anywhere else (Finder, Explorer, this app's own article-row Delete).
+Confirmed via explicit follow-up that they wanted the destructive behavior,
+not the safe one, and that it should apply going forward as the *default*
+Delete, not a separate second option next to a preserved safe one.
+
+`db.delete_folder()` was replaced with `db.get_articles_in_folder()` (read-
+only lookup) + `db.clear_folder_sort_overrides()`; `post_folder_delete` in
+app.py now loops the folder's articles through the same per-article cleanup
+`DELETE /article/{id}` already used (db row + `cache.delete_article_cache` +
+pdf file), so a folder's "container" is destroyed the same way single
+articles always were -- there's no longer a code path where "delete" on
+anything in this app means "keep the content, lose the label." The confirm()
+dialog now names the article count and says "permanently delete," replacing
+the old "will NOT be deleted" wording.
+
+**Lesson:** "safe by design" is a property of an implementation, not
+automatically the right product decision -- a delete that silently
+downgrades to a no-op-on-content because the underlying data model makes
+that easy is still a surprise if it doesn't match the verb's meaning
+everywhere else in the app. When a real usage incident reveals the gap,
+prefer changing the default to match user expectation (with a clear, count-
+specific confirm dialog for the newly-real risk) over keeping the safe
+behavior and bolting a second "actually delete" option next to it -- one
+unambiguous Delete beats two similarly-named buttons with different blast
+radii.

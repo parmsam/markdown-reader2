@@ -89,17 +89,17 @@
     }
   });
 
-  // Delete a folder -- a folder is just a path string on an article (see
-  // db.py's delete_folder), not a real container, so this only ever
-  // dissolves the grouping: articles move back to the library root, never
-  // deleted. The confirm() is explicit about that since "Delete" alone
-  // could otherwise read as destroying the articles too.
+  // Delete a folder -- Finder-style: this permanently deletes every article
+  // (and cached audio) inside the folder and its sub-folders, not just the
+  // grouping. The confirm() names the article count so this reads as
+  // clearly destructive before it happens.
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest(".folder-delete-btn");
     if (!btn) return;
 
     const path = btn.getAttribute("data-folder-path");
-    if (!confirm(`Remove folder "${path}"? Its articles move back to the library root -- they will NOT be deleted.`)) return;
+    const count = btn.getAttribute("data-folder-count");
+    if (!confirm(`Delete folder "${path}" and permanently delete ${count} article${count === "1" ? "" : "s"} inside it (including cached audio)? This cannot be undone.`)) return;
 
     try {
       const resp = await fetch("/folders/delete", {

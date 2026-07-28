@@ -284,8 +284,21 @@ def post_folder_rename(old_path: str = "", new_path: str = ""):
 
 @app.post("/folders/delete")
 def post_folder_delete(path: str = ""):
-    count = db.delete_folder(DB, path)
-    notice = f"Removed folder \"{path}\" -- {count} article{'s' if count != 1 else ''} moved back to the library root."
+    # Finder-style: deleting a folder deletes everything inside it (and any
+    # sub-folders), not just the grouping. Reuses the same per-article
+    # cleanup as the single-article DELETE route below (cache + pdf file),
+    # since a folder is just a path string on N articles, not a real
+    # container with its own storage to clean up.
+    articles = db.get_articles_in_folder(DB, path)
+    for article in articles:
+        deleted = db.delete_article(DB, article.id)
+        if deleted is not None:
+            cache.delete_article_cache(deleted.content_hash, DB)
+            if deleted.pdf_path:
+                Path(deleted.pdf_path).unlink(missing_ok=True)
+    db.clear_folder_sort_overrides(DB, path)
+    count = len(articles)
+    notice = f"Deleted folder \"{path}\" and {count} article{'s' if count != 1 else ''}."
     return RedirectResponse(f"/?notice={quote(notice)}", status_code=303)
 
 
