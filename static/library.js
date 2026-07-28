@@ -92,6 +92,33 @@
     }
   });
 
+  // Delete a folder -- a folder is just a path string on an article (see
+  // db.py's delete_folder), not a real container, so this only ever
+  // dissolves the grouping: articles move back to the library root, never
+  // deleted. The confirm() is explicit about that since "Delete" alone
+  // could otherwise read as destroying the articles too.
+  document.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".folder-delete-btn");
+    if (!btn) return;
+    e.preventDefault(); // don't also toggle the <details> open/closed
+
+    const path = btn.getAttribute("data-folder-path");
+    if (!confirm(`Remove folder "${path}"? Its articles move back to the library root -- they will NOT be deleted.`)) return;
+
+    try {
+      const resp = await fetch("/folders/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `path=${encodeURIComponent(path)}`,
+      });
+      if (!resp.ok) throw new Error(`status ${resp.status}`);
+      window.location = resp.url; // fetch follows the redirect to /?notice=... itself
+    } catch (err) {
+      console.error("Folder delete failed:", err);
+      alert("Failed to delete folder.");
+    }
+  });
+
   const sortSelect = document.getElementById("sort-select");
   if (sortSelect) sortSelect.addEventListener("change", () => sortSelect.form.submit());
 })();

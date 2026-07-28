@@ -279,6 +279,13 @@ def post_folder_rename(old_path: str = "", new_path: str = ""):
     return RedirectResponse("/", status_code=303)
 
 
+@app.post("/folders/delete")
+def post_folder_delete(path: str = ""):
+    count = db.delete_folder(DB, path)
+    notice = f"Removed folder \"{path}\" -- {count} article{'s' if count != 1 else ''} moved back to the library root."
+    return RedirectResponse(f"/?notice={quote(notice)}", status_code=303)
+
+
 @app.get("/article/{article_id}")
 def get_article(article_id: int):
     article = db.get_article(DB, article_id)

@@ -141,6 +141,27 @@ def set_article_folder(db: Database, article_id: int, folder: str | None) -> Non
     articles.update({"folder": normalize_folder(folder)}, article_id)
 
 
+def delete_folder(db: Database, path: str) -> int:
+    """Remove a folder (and any of its sub-folders) by clearing `folder` on
+    every article inside it -- moves them back to the root library rather
+    than deleting them. There's no separate "delete the articles too" path:
+    a folder is just a path string on an article (see list_folders'
+    docstring), not a real container, so "deleting" it can only ever mean
+    dissolving the grouping, never destroying content. Returns the number
+    of articles moved."""
+    path = normalize_folder(path)
+    if not path:
+        return 0
+    articles = get_articles_table(db)
+    updated = 0
+    for row in list(articles.rows):
+        folder = row["folder"]
+        if folder == path or (folder and folder.startswith(path + "/")):
+            articles.update({"folder": None}, row["id"])
+            updated += 1
+    return updated
+
+
 def rename_folder(db: Database, old_path: str, new_path: str) -> int:
     """Rename a folder, cascading to every descendant sub-folder path too
     (e.g. renaming "Notes" to "Journal" also turns "Notes/Work" into

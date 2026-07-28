@@ -163,6 +163,11 @@ def _render_folder_node(name: str, node: dict, all_folders: list[str]) -> Detail
             Span(f"\U0001F4C1 {name}", cls="folder-name"),
             Span(f"({total})", cls="folder-count"),
             Button("Rename", type="button", cls="btn btn-sm folder-rename-btn", data_folder_path=node["path"]),
+            Button(
+                "Delete", type="button", cls="btn btn-sm btn-danger folder-delete-btn",
+                data_folder_path=node["path"],
+                title="Removes the folder only -- its articles move back to the library root, they aren't deleted",
+            ),
         ),
         Div(*rows, cls="article-list") if rows else "",
         *children,
