@@ -18,6 +18,13 @@
   --highlight-word: #ffcf40;
   --mark-bg: #b8f2d0;
   --danger: #dc2626;
+  /* Custom <select> chevron (see the shared select rule below): a plain
+     background-image SVG doesn't inherit `color`/currentColor from the
+     element it's on (that's a mask-image thing, and <select> can't take
+     the ::after a mask trick would need -- form controls don't render
+     generated content), so the two themes each get their own pre-colored
+     copy of the same chevron via this variable instead. */
+  --select-chevron: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23666666%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E");
 }
 
 @media (prefers-color-scheme: dark) {
@@ -33,6 +40,7 @@
     --highlight-word: #7a5c12;
     --mark-bg: #1f3d2e;
     --danger: #f87171;
+    --select-chevron: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%239a9a9a%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E");
   }
 }
 
@@ -41,12 +49,14 @@
   --bg: #16181d; --fg: #e8e8e8; --fg-muted: #9a9a9a; --border: #2c2f36;
   --accent: #5b8def; --accent-fg: #0b0d10; --surface: #1e2127;
   --highlight-sentence: #4a4321; --highlight-word: #7a5c12; --mark-bg: #1f3d2e; --danger: #f87171;
+  --select-chevron: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%239a9a9a%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E");
 }
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff; --fg: #1a1a1a; --fg-muted: #666; --border: #e0e0e0;
   --accent: #2563eb; --accent-fg: #ffffff; --surface: #f7f7f8;
   --highlight-sentence: #fff3b0; --highlight-word: #ffcf40; --mark-bg: #b8f2d0; --danger: #dc2626;
+  --select-chevron: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23666666%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E");
 }
 
 * { box-sizing: border-box; }
@@ -90,11 +100,41 @@ body {
 
 .empty-state { text-align: center; padding: 3rem 1rem; color: var(--fg-muted); }
 
+/* Shared modern <select> look, used by every dropdown in the app (library
+   sort, per-article/per-folder folder-move + folder-sort, voice picker) --
+   previously each had its own near-duplicate box styling and just fell back
+   to the browser's native dropdown arrow, which looks visually inconsistent
+   with the rest of this app's flat, rounded, custom-styled controls across
+   browsers/OSes. `appearance: none` drops that native arrow in favor of
+   --select-chevron (a theme-matched SVG, see :root above), plus a proper
+   hover/focus treatment matching .btn/.folder-group's radius and this app's
+   accent color instead of the browser's default focus ring.
+   Per-select rules below this one now only carry size overrides
+   (padding/font-size/max-width) that make sense to vary per context. */
+.sort-form select, .folder-select, .folder-sort-select, #voice-select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-color: var(--surface); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 6px; cursor: pointer;
+  background-image: var(--select-chevron); background-repeat: no-repeat;
+  background-position: right 0.55rem center; background-size: 10px 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sort-form select:hover, .folder-select:hover, .folder-sort-select:hover, #voice-select:hover {
+  border-color: var(--accent);
+}
+.sort-form select:focus-visible, .folder-select:focus-visible,
+.folder-sort-select:focus-visible, #voice-select:focus-visible {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.sort-form select:disabled, .folder-select:disabled, .folder-sort-select:disabled, #voice-select:disabled {
+  opacity: 0.5; cursor: default;
+}
+
 .library-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .sort-form label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--fg-muted); }
 .sort-form select {
-  background: var(--surface); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.35rem 0.5rem; font-size: 0.85rem;
+  padding: 0.35rem 1.75rem 0.35rem 0.6rem; font-size: 0.85rem;
 }
 
 .lan-banner {
@@ -122,8 +162,7 @@ body {
 
 .folder-move-form { display: inline-flex; }
 .folder-select {
-  background: var(--surface); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.3rem 0.4rem; font-size: 0.8rem; max-width: 10rem;
+  padding: 0.3rem 1.6rem 0.3rem 0.5rem; font-size: 0.8rem; max-width: 10rem;
 }
 
 .folder-group {
@@ -139,8 +178,7 @@ body {
 .folder-rename-btn { font-size: 0.75rem !important; padding: 0.2rem 0.5rem !important; }
 .folder-sort-form { display: inline-flex; }
 .folder-sort-select {
-  background: var(--surface); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.2rem 0.4rem; font-size: 0.75rem; max-width: 11rem;
+  padding: 0.2rem 1.5rem 0.2rem 0.5rem; font-size: 0.75rem; max-width: 11rem;
 }
 .folder-group > .article-list { margin-top: 0.75rem; }
 .badge {
@@ -306,6 +344,5 @@ body.has-player-bar { padding-bottom: 0; }
 .speed-btn { font-size: 0.8rem !important; padding: 0.35rem 0.5rem !important; min-width: 2.4rem !important; min-height: 2.4rem !important; }
 .speed-btn.active { background: var(--accent) !important; color: var(--accent-fg); }
 #voice-select {
-  background: var(--surface); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 6px; padding: 0.4rem; min-height: 2.4rem;
+  padding: 0.4rem 1.85rem 0.4rem 0.6rem; min-height: 2.4rem;
 }
