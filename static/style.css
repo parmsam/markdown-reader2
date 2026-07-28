@@ -1,4 +1,12 @@
 :root {
+  /* Without this, native form controls (a <select>'s dropdown popup,
+     checkboxes, scrollbars, date pickers) only ever follow the OS's own
+     dark/light preference -- never our data-theme override below -- so
+     manually toggling this app to dark while the OS is in light mode (or
+     vice versa) got a jarring light-chrome dropdown popup on an otherwise
+     dark page. `light dark` here means "follow the OS" (matching the
+     @media block below); the data-theme overrides pin it explicitly. */
+  color-scheme: light dark;
   --bg: #ffffff;
   --fg: #1a1a1a;
   --fg-muted: #666;
@@ -29,11 +37,13 @@
 }
 
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #16181d; --fg: #e8e8e8; --fg-muted: #9a9a9a; --border: #2c2f36;
   --accent: #5b8def; --accent-fg: #0b0d10; --surface: #1e2127;
   --highlight-sentence: #4a4321; --highlight-word: #7a5c12; --mark-bg: #1f3d2e; --danger: #f87171;
 }
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #ffffff; --fg: #1a1a1a; --fg-muted: #666; --border: #e0e0e0;
   --accent: #2563eb; --accent-fg: #ffffff; --surface: #f7f7f8;
   --highlight-sentence: #fff3b0; --highlight-word: #ffcf40; --mark-bg: #b8f2d0; --danger: #dc2626;

@@ -151,12 +151,42 @@ def _count_descendants(children: dict) -> int:
     return sum(len(n["articles"]) + _count_descendants(n["children"]) for n in children.values())
 
 
-def _render_folder_node(name: str, node: dict, all_folders: list[str]) -> Details:
+def _all_created_ats(node: dict) -> list[str]:
+    """created_at of every article anywhere in this folder's subtree (ISO
+    8601 UTC strings -- see db.py's _now() -- so plain string min/max already
+    sorts correctly, no parsing needed)."""
+    dates = [a.created_at for a in node["articles"] if a.created_at]
+    for child in node["children"].values():
+        dates.extend(_all_created_ats(child))
+    return dates
+
+
+def _sorted_folder_entries(items, sort: str) -> list:
+    """Order a folder level (siblings at the same depth) the same way the
+    "Sort by" control orders articles, recursively -- so under "Recently
+    added" the folder holding the newest article floats up too, not just
+    the articles inside it once you open it. Title sorts order folders by
+    their own name (case-insensitively, ascending/descending to match);
+    "recent"/"oldest" order by the most/least recent created_at anywhere in
+    that folder's subtree, since a folder has no created_at of its own."""
+    entries = list(items)
+    if sort in ("title_asc", "title_desc"):
+        return sorted(entries, key=lambda kv: kv[0].lower(), reverse=(sort == "title_desc"))
+    is_oldest = sort == "oldest"
+    default = "9999" if is_oldest else ""
+    return sorted(
+        entries,
+        key=lambda kv: (min if is_oldest else max)(_all_created_ats(kv[1]), default=default),
+        reverse=not is_oldest,
+    )
+
+
+def _render_folder_node(name: str, node: dict, all_folders: list[str], sort: str) -> Details:
     total = len(node["articles"]) + _count_descendants(node["children"])
     rows = [_article_row(a, all_folders) for a in node["articles"]]
     children = [
-        _render_folder_node(child_name, child, all_folders)
-        for child_name, child in sorted(node["children"].items())
+        _render_folder_node(child_name, child, all_folders, sort)
+        for child_name, child in _sorted_folder_entries(node["children"].items(), sort)
     ]
     return Details(
         Summary(
@@ -195,14 +225,17 @@ def library_page(articles: list, lan_url: str | None = None, notice: str | None 
         # `articles` is already ordered per `sort` (db.list_articles); folder
         # bucketing below (_build_folder_tree) preserves that order within
         # each bucket, so sorting applies inside every folder too, not just
-        # the root-level list. Folders themselves are always listed
-        # alphabetically (sorted(tree.items())), independent of `sort`.
+        # the root-level list. Folder *order* itself also follows `sort`
+        # (_sorted_folder_entries), recursively at every nesting depth.
         all_folders = sorted({a.folder for a in articles if a.folder})
         root_articles, tree = _build_folder_tree(articles)
         parts = []
         if root_articles:
             parts.append(Div(*[_article_row(a, all_folders) for a in root_articles], cls="article-list"))
-        parts.extend(_render_folder_node(name, node, all_folders) for name, node in sorted(tree.items()))
+        parts.extend(
+            _render_folder_node(name, node, all_folders, sort)
+            for name, node in _sorted_folder_entries(tree.items(), sort)
+        )
         body = Div(*parts)
 
     # Only rendered when app.py detects the request came from localhost --
