@@ -197,6 +197,7 @@ summary { cursor: pointer; font-weight: 600; }
 
 .reader-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .reader-header h1 { margin-bottom: 0.15rem; overflow-wrap: anywhere; }
+.reader-header-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
 .edit-note { color: var(--fg-muted); font-size: 0.9rem; }
 
 .doc-body pre { background: var(--surface); padding: 1rem; border-radius: 8px; overflow-x: auto; }
@@ -212,6 +213,24 @@ summary { cursor: pointer; font-weight: 600; }
   border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem;
 }
 
+/* Hidden by default -- only shown in audio-only mode (below), where it takes
+   the doc-body's place as the thing to actually look at while listening. */
+#now-playing-panel { display: none; }
+body.audio-only-mode #now-playing-panel { display: block; }
+body.audio-only-mode .doc-body,
+body.audio-only-mode .toc-sidebar {
+  display: none;
+}
+/* !important: the resume banner's shown/hidden state is driven by JS setting
+   its inline style="display:..." directly (player.js), which otherwise
+   always wins over a plain stylesheet rule regardless of selector specificity. */
+body.audio-only-mode .resume-banner { display: none !important; }
+#now-playing-text {
+  font-size: 1.4rem; line-height: 1.5; font-weight: 600; text-align: center;
+  padding: 3rem 1rem; max-width: 40rem; margin: 0 auto;
+}
+#now-playing-text .word.word-active { background: var(--highlight-word); border-radius: 3px; }
+
 body.has-player-bar { padding-bottom: 0; }
 .player-bar {
   position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg);
@@ -223,6 +242,30 @@ body.has-player-bar { padding-bottom: 0; }
 }
 .progress-bar { height: 3px; background: var(--surface); border-radius: 2px; margin-bottom: 0.5rem; overflow: hidden; }
 .progress-bar::after { content: ""; display: block; height: 100%; background: var(--accent); width: var(--pct, 0%); }
+
+.playhead-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
+.playhead-time {
+  font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--fg-muted);
+  min-width: 2.6rem; text-align: center; flex-shrink: 0;
+}
+.playhead-seek {
+  flex: 1; height: 1.5rem; margin: 0; appearance: none; background: transparent; cursor: pointer;
+}
+.playhead-seek::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: var(--surface);
+}
+.playhead-seek::-moz-range-track {
+  height: 4px; border-radius: 2px; background: var(--surface);
+}
+.playhead-seek::-webkit-slider-thumb {
+  appearance: none; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); margin-top: -5px;
+}
+.playhead-seek::-moz-range-thumb {
+  width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: none;
+}
+.playhead-seek:disabled { opacity: 0.4; cursor: default; }
+
 .transport-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
 .settings-row { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
 .transport-row button, .settings-row button {

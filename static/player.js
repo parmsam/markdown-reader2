@@ -46,6 +46,13 @@
   let speed = window.INITIAL_SPEED || 1.0;
   let userScrolling = false;
   let userScrollTimer = null;
+  // Playhead: when the current segment's AudioBufferSourceNode started,
+  // in the AudioContext's own clock (ctx.currentTime), so elapsed time is
+  // always just `ctx.currentTime - segmentStartedAt` -- recomputed on every
+  // seek so it stays correct relative to the *new* source's start point.
+  let segmentStartedAt = 0;
+  let segmentDuration = 0;
+  let playheadDragging = false;
 
   function getAudioContext() {
     if (!audioCtx || audioCtx.state === "closed") {
@@ -147,6 +154,23 @@
     return d.innerHTML;
   }
 
+  function formatTime(seconds) {
+    if (!isFinite(seconds) || seconds < 0) seconds = 0;
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  // ---- audio-only mode's "now playing" panel: mirrors whatever the main
+  // document has for the active segment (word spans/highlighting included),
+  // so it stays in sync for free instead of tracking word state twice ----
+  const nowPlayingEl = document.getElementById("now-playing-text");
+  function syncNowPlaying() {
+    if (!nowPlayingEl) return;
+    const el = currentSegment >= 0 ? segEls[currentSegment] : null;
+    nowPlayingEl.innerHTML = el ? el.innerHTML : "Nothing playing yet";
+  }
+
   function setActiveSegment(index) {
     if (currentSegment >= 0 && segEls[currentSegment]) {
       segEls[currentSegment].classList.remove("sentence-active");
@@ -161,6 +185,7 @@
       maybeAutoScroll(el);
     }
     updateProgressBar();
+    syncNowPlaying();
     postProgress();
   }
 
@@ -171,6 +196,7 @@
       wordEl.classList.add("word-active");
       currentWordEl = wordEl;
     }
+    syncNowPlaying();
   }
 
   function scheduleWordHighlights(el, wordTimings, startedAt, segIndex, myGen) {
@@ -204,11 +230,51 @@
     if (!inView) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  // ---- playhead: elapsed/duration for whatever segment is currently
+  // playing, plus a seek bar to jump within it ----
+  const playheadSeek = document.getElementById("playhead-seek");
+  const playheadElapsedEl = document.getElementById("playhead-elapsed");
+  const playheadDurationEl = document.getElementById("playhead-duration");
+
+  function updatePlayheadUI(elapsed, duration) {
+    if (!playheadSeek) return;
+    playheadDurationEl.textContent = formatTime(duration);
+    playheadSeek.max = String(duration || 0);
+    playheadSeek.disabled = !duration;
+    if (playheadDragging) return; // don't fight the user's own drag position
+    playheadElapsedEl.textContent = formatTime(elapsed);
+    playheadSeek.value = String(elapsed);
+  }
+
+  function tickPlayhead() {
+    if (playing && currentSource && audioCtx) {
+      const elapsed = Math.max(0, Math.min(audioCtx.currentTime - segmentStartedAt, segmentDuration));
+      updatePlayheadUI(elapsed, segmentDuration);
+    }
+    requestAnimationFrame(tickPlayhead);
+  }
+  requestAnimationFrame(tickPlayhead);
+
+  if (playheadSeek) {
+    ["pointerdown", "touchstart"].forEach((evt) => {
+      playheadSeek.addEventListener(evt, () => { playheadDragging = true; });
+    });
+    playheadSeek.addEventListener("input", () => {
+      playheadElapsedEl.textContent = formatTime(parseFloat(playheadSeek.value));
+    });
+    playheadSeek.addEventListener("change", () => {
+      playheadDragging = false;
+      seekWithinSegment(parseFloat(playheadSeek.value));
+    });
+  }
+
   // ---- playback session (generation-counter guarded, ported from usePlayer.ts) ----
   async function playSegment(index, myGen) {
     if (gen !== myGen) return;
     if (index >= totalSegments) {
       setActiveSegment(-1);
+      segmentDuration = 0;
+      updatePlayheadUI(0, 0);
       setPlayingUI(false);
       return;
     }
@@ -243,6 +309,9 @@
       source.connect(ctx.destination);
       currentSource = source;
       const startedAt = ctx.currentTime;
+      segmentStartedAt = startedAt;
+      segmentDuration = entry.duration;
+      updatePlayheadUI(0, entry.duration);
       source.start();
       scheduleWordHighlights(segEls[index], entry.wordTimings, startedAt, index, myGen);
 
@@ -254,6 +323,51 @@
       console.error("Audio playback error:", e);
       if (gen === myGen) await playSegment(index + 1, myGen);
     }
+  }
+
+  // Reposition playback within the currently-active segment (dragging the
+  // playhead), rather than starting a whole new session from segment 0's
+  // lookahead the way jumpTo()/startSession() do. Web Audio has no native
+  // seek -- an AudioBufferSourceNode plays the buffer it's given starting
+  // from source.start()'s *offset* argument, so seeking means swapping in a
+  // fresh source at the new offset. Always resumes playback (matches how
+  // dragging a scrubber reads on most audio players); nulling the old
+  // source's onended before stopping it, exactly like stopAudio(), keeps it
+  // from also (wrongly) advancing to the next segment on its own.
+  function seekWithinSegment(offsetSeconds) {
+    if (currentSegment < 0) return;
+    const entry = cacheMap.get(currentSegment);
+    if (!entry) return;
+    const myGen = gen;
+    const ctx = getAudioContext();
+    const clamped = Math.max(0, Math.min(offsetSeconds, Math.max(0, entry.duration - 0.02)));
+
+    if (currentSource) {
+      try {
+        currentSource.onended = null;
+        currentSource.stop();
+        currentSource.disconnect();
+      } catch (_) {}
+      currentSource = null;
+    }
+    if (wordTimer) { clearTimeout(wordTimer); wordTimer = null; }
+
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const source = ctx.createBufferSource();
+    source.buffer = entry.buffer;
+    source.connect(ctx.destination);
+    currentSource = source;
+    segmentStartedAt = ctx.currentTime - clamped;
+    segmentDuration = entry.duration;
+    source.start(0, clamped);
+    scheduleWordHighlights(segEls[currentSegment], entry.wordTimings, segmentStartedAt, currentSegment, myGen);
+    source.onended = () => {
+      if (gen !== myGen || currentSource !== source) return;
+      currentSource = null;
+      playSegment(currentSegment + 1, myGen);
+    };
+    setPlayingUI(true);
+    updatePlayheadUI(clamped, entry.duration);
   }
 
   function startSession(fromSegment) {
@@ -403,6 +517,25 @@
       setSpeed(SPEEDS[i]);
     }
   });
+
+  // ---- audio-only mode: hides the article text/TOC, shows the
+  // "now playing" panel (syncNowPlaying(), above) instead. Persisted
+  // per-browser via localStorage, matching theme.js's pattern -- not
+  // per-article, since it's a listening-preference, not article state. ----
+  const AUDIO_ONLY_KEY = "audioOnlyMode";
+  const audioOnlyToggle = document.getElementById("audio-only-toggle");
+  function applyAudioOnlyMode(enabled) {
+    document.body.classList.toggle("audio-only-mode", enabled);
+    if (audioOnlyToggle) audioOnlyToggle.textContent = enabled ? "📄 Show text" : "🎧 Audio only";
+  }
+  applyAudioOnlyMode(localStorage.getItem(AUDIO_ONLY_KEY) === "1");
+  if (audioOnlyToggle) {
+    audioOnlyToggle.addEventListener("click", () => {
+      const enabled = !document.body.classList.contains("audio-only-mode");
+      localStorage.setItem(AUDIO_ONLY_KEY, enabled ? "1" : "0");
+      applyAudioOnlyMode(enabled);
+    });
+  }
 
   // ---- resume banner ----
   const lastIndex = window.LAST_SEGMENT_INDEX;

@@ -444,6 +444,15 @@ def player_bar(voice: str, speed: float) -> Div:
     return Div(
         Div(cls="progress-bar", id="progress-bar"),
         Div(
+            Span("0:00", id="playhead-elapsed", cls="playhead-time"),
+            Input(
+                type="range", id="playhead-seek", min="0", max="0", step="0.01", value="0",
+                cls="playhead-seek", disabled=True, aria_label="Seek within current sentence",
+            ),
+            Span("0:00", id="playhead-duration", cls="playhead-time"),
+            cls="playhead-row",
+        ),
+        Div(
             Button("⏮", id="btn-skip-back", title="Previous sentence (←)"),
             Button("▶", id="btn-play-pause", title="Play/Pause (Space)"),
             Button("⏹", id="btn-stop", title="Stop"),
@@ -483,10 +492,21 @@ def article_page(article, body_html: str, toc: list) -> Html:
                             H1(article.title or "Untitled"),
                             _source_label(article),
                         ),
-                        A("Edit", href=f"/article/{article.id}/edit", cls="btn btn-sm"),
+                        Div(
+                            Button(
+                                "\U0001F3A7 Audio only", id="audio-only-toggle", type="button",
+                                cls="btn btn-sm", title="Hide the article text, just show playback",
+                            ),
+                            A("Edit", href=f"/article/{article.id}/edit", cls="btn btn-sm"),
+                            cls="reader-header-actions",
+                        ),
                         cls="reader-header",
                     ),
                     resume_banner,
+                    Div(
+                        Div("Nothing playing yet", id="now-playing-text"),
+                        id="now-playing-panel",
+                    ),
                     Div(NotStr(body_html), id="doc-body", cls="doc-body"),
                     cls="container reader-main",
                 ),
