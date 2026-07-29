@@ -25,6 +25,14 @@
      generated content), so the two themes each get their own pre-colored
      copy of the same chevron via this variable instead. */
   --select-chevron: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2210%22%20height%3D%226%22%20viewBox%3D%220%200%2010%206%22%3E%3Cpath%20d%3D%22M1%201l4%204%204-4%22%20stroke%3D%22%23666666%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E");
+  /* Fallback bottom-clearance for the article page, reserving space for the
+     fixed player bar so it doesn't cover the article's last lines. player.js
+     overwrites this with the bar's *actual* measured height (via
+     ResizeObserver) as soon as it runs, since the bar's height isn't
+     constant -- its settings row wraps to two lines on narrow viewports, a
+     long voice name, or larger browser font/zoom. This value only matters
+     for the brief window before that JS runs (or if it doesn't run at all). */
+  --player-bar-space: 7rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -69,7 +77,7 @@ body {
   line-height: 1.6;
 }
 
-.container { max-width: 760px; margin: 0 auto; padding: 1.5rem 1.25rem 7rem; }
+.container { max-width: 760px; margin: 0 auto; padding: 1.5rem 1.25rem 2rem; }
 
 .topnav {
   display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
@@ -247,6 +255,12 @@ summary { cursor: pointer; font-weight: 600; }
 
 .reader-layout { display: flex; gap: 2rem; align-items: flex-start; }
 .reader-main { flex: 1; min-width: 0; }
+/* Overrides .container's own padding-bottom (see player.js's ResizeObserver
+   on #player-bar for why this needs to be a JS-measured variable rather
+   than a fixed guess). The `main.` element qualifier -- not just relying on
+   source order -- is what makes this beat .container's mobile media-query
+   override below, which would otherwise win by simply appearing later. */
+main.reader-main { padding-bottom: var(--player-bar-space); }
 .toc-sidebar {
   width: 220px; flex-shrink: 0; position: sticky; top: 3.5rem;
   max-height: calc(100vh - 4rem); overflow-y: auto; padding: 1rem 0.5rem;
@@ -269,10 +283,10 @@ summary { cursor: pointer; font-weight: 600; }
 }
 
 @media (max-width: 600px) {
-  /* Player bar can wrap to two rows at this width (transport + speed/voice),
-     so leave more room than the desktop single-row bar needs -- better an
-     article's last lines have extra clearance than get hidden behind it. */
-  .container { padding: 1rem 1rem 10rem; }
+  /* --player-bar-space (see .reader-main) already accounts for the player
+     bar wrapping to two rows at this width, so .container only needs its
+     normal mobile spacing here, not a second player-bar-sized guess. */
+  .container { padding: 1rem 1rem 1.5rem; }
   .topnav { padding: 0.6rem 1rem; }
   .article-row { flex-wrap: wrap; row-gap: 0.5rem; }
   .article-row-meta { margin-left: auto; }
@@ -317,7 +331,6 @@ body.audio-only-mode #btn-jump-to-current { display: none; }
 }
 #now-playing-text .word.word-active { background: var(--highlight-word); border-radius: 3px; }
 
-body.has-player-bar { padding-bottom: 0; }
 .player-bar {
   position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg);
   border-top: 1px solid var(--border);

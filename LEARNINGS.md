@@ -572,3 +572,41 @@ specific confirm dialog for the newly-real risk) over keeping the safe
 behavior and bolting a second "actually delete" option next to it -- one
 unambiguous Delete beats two similarly-named buttons with different blast
 radii.
+
+## Player bar clearance: a fixed-height CSS guess vs. a JS-measured one
+
+The fixed `.player-bar` sat over the article's last lines on some viewports.
+The cause: `.container`'s bottom padding (the space reserved so the fixed
+bar has nothing to cover) was a hardcoded guess -- 7rem normally, 10rem under
+a 600px breakpoint with a comment acknowledging the bar "can wrap to two
+rows at this width." Two problems with that: (1) `body.has-player-bar
+{ padding-bottom: 0; }` was dead code -- `body` itself never had padding to
+zero out, the real padding lived on `.container` -- so whatever that rule
+was meant to do, it wasn't doing it; (2) a width breakpoint is a proxy for
+"will the settings row wrap," not the actual thing -- it also wraps from a
+long voice name, larger browser font size, or page zoom, none of which
+change viewport width, so the fixed 10rem guess could still be wrong even
+on "mobile."
+
+Fixed by measuring instead of guessing: player.js observes `#player-bar`
+with a `ResizeObserver` and writes its real `offsetHeight` into a
+`--player-bar-space` CSS variable on `<html>`; `main.reader-main` (not
+`.container` generally -- other pages never had a player bar and don't need
+the reserved space) sets `padding-bottom: var(--player-bar-space)`. A
+`:root` default covers the moment before that JS runs. One subtlety:
+`main.reader-main`'s element-qualified selector is deliberate, not just
+tidiness -- a plain `.reader-main` class selector has the same specificity
+as `.container`'s mobile media-query rule, and since that media query
+rule appears later in the file, it would silently win and clobber the var
+back to a fixed value on narrow viewports (caught by a Playwright check
+computing padding-bottom directly, not just eyeballing it).
+
+**Lesson:** when a layout gap depends on another element's *rendered* size
+and that size can change for reasons a breakpoint doesn't capture (dynamic
+wrapping, user font/zoom settings, content-dependent height), measure it at
+runtime (ResizeObserver -> CSS var) rather than encoding a guess as a fixed
+value -- and when two same-specificity rules could both apply to the same
+property, don't rely on remembering which one comes later in the file;
+either bump specificity for the one that must win, or verify with a
+computed-style check (position in a CSS file is easy to reorder by accident
+later and silently reintroduce exactly this bug).

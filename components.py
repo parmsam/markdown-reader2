@@ -683,6 +683,5 @@ def article_page(article, body_html: str, toc: list) -> Html:
                     f"window.INITIAL_SPEED = {speed!r};\n"
                 )
             ),
-            cls="has-player-bar",
         ),
     )

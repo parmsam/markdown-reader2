@@ -22,6 +22,21 @@
     tocDetails.open = false;
   }
 
+  // Keep the article's bottom padding matched to the *actual* rendered
+  // height of the fixed player bar (see style.css's --player-bar-space).
+  // That height isn't constant -- the settings row wraps to two lines on
+  // narrow viewports, a long voice name, or larger browser font/zoom -- so a
+  // fixed CSS guess could under-reserve space and let the bar cover the
+  // article's last lines. ResizeObserver catches every case that changes
+  // the bar's height, not just the viewport widths a breakpoint anticipates.
+  const playerBarEl = document.getElementById("player-bar");
+  if (playerBarEl && "ResizeObserver" in window) {
+    const updatePlayerBarSpace = () => {
+      document.documentElement.style.setProperty("--player-bar-space", `${playerBarEl.offsetHeight}px`);
+    };
+    new ResizeObserver(updatePlayerBarSpace).observe(playerBarEl);
+  }
+
   // ---- DOM: collect every segment element once, indexed by its data-seg ----
   const segEls = [];
   const segTypes = [];
