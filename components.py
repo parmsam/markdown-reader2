@@ -121,7 +121,11 @@ def _nav():
             Span(APP_NAME, cls="brand-name"),
             href="/", cls="nav-link nav-brand",
         ),
-        Span(f"v{APP_VERSION}", cls="nav-version"),
+        Span(
+            Span(f"v{APP_VERSION}"),
+            A("Check for updates", href="#", id="check-update-link", cls="nav-version-check"),
+            cls="nav-version",
+        ),
         A("+ Add article", href="/add", cls="nav-link nav-add"),
         Button(
             id="theme-toggle", cls="theme-toggle", type="button",

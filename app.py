@@ -108,6 +108,18 @@ def get_library(request: Request, notice: str = "", sort: str = db.DEFAULT_SORT)
     )
 
 
+@app.get("/api/check-update")
+def get_check_update():
+    # Manual "check for updates" click -- bypasses the passive cache TTL, so
+    # it's the one place a synchronous (up to a few seconds) GitHub API call
+    # is acceptable.
+    update = update_check.force_check(comp.APP_VERSION)
+    return JSONResponse({
+        "update": update,
+        "url": update_check.release_url(update) if update else None,
+    })
+
+
 @app.get("/add")
 def get_add(url: str = "", text: str = "", error: str = "", autofetch: bool = False):
     # `url` (and optionally `autofetch=1`) let a share action hand off a

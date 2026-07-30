@@ -81,5 +81,16 @@ def get_available_update(current_version: str) -> str | None:
     return None
 
 
+def force_check(current_version: str) -> str | None:
+    """Synchronously re-fetches the latest release, ignoring the cache TTL --
+    for the manual "check for updates" UI action. Blocks for up to
+    _TIMEOUT_SECONDS; the passive per-page-load path (get_available_update)
+    never does this."""
+    with _lock:
+        _state["checking"] = True
+    _refresh()
+    return get_available_update(current_version)
+
+
 def release_url(version: str) -> str:
     return f"https://github.com/{REPO}/releases/tag/v{version}"

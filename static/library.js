@@ -26,6 +26,35 @@
     }
   });
 
+  // Manual "check for updates" -- lives in the navbar so it's available on
+  // every page (unlike the passive library-page banner, see components.py's
+  // library_page). A hit turns the link itself into a link to the release;
+  // a miss/failure just flashes a status before reverting.
+  document.addEventListener("click", async (e) => {
+    const link = e.target.closest("#check-update-link");
+    if (!link) return;
+    e.preventDefault();
+
+    const original = link.textContent;
+    link.textContent = "Checking…";
+    try {
+      const resp = await fetch("/api/check-update");
+      const data = await resp.json();
+      if (data.update) {
+        link.textContent = `v${data.update} available`;
+        link.href = data.url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        return;
+      }
+      link.textContent = "Up to date";
+    } catch (err) {
+      console.error("Update check failed:", err);
+      link.textContent = "Check failed";
+    }
+    setTimeout(() => { link.textContent = original; }, 2000);
+  });
+
   document.addEventListener("click", async (e) => {
     const btn = e.target.closest("#copy-lan-url");
     if (!btn) return;
