@@ -121,6 +121,7 @@ def _nav():
             Span(APP_NAME, cls="brand-name"),
             href="/", cls="nav-link nav-brand",
         ),
+        Span(f"v{APP_VERSION}", cls="nav-version"),
         A("+ Add article", href="/add", cls="nav-link nav-add"),
         Button(
             id="theme-toggle", cls="theme-toggle", type="button",
@@ -345,7 +346,6 @@ def library_page(
                 update_banner, lan_banner, notice_banner, body,
                 cls="container",
             ),
-            Div(f"{APP_NAME} v{APP_VERSION}", cls="app-footer"),
         ),
     )
 
