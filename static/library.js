@@ -144,6 +144,16 @@
     }
   });
 
+  // Expand/collapse every folder at once, including nested subfolders --
+  // they're all plain <details class="folder-group"> elements, so this is
+  // just flipping .open directly; nothing to persist server-side.
+  document.getElementById("expand-all-folders")?.addEventListener("click", () => {
+    document.querySelectorAll(".folder-group").forEach((d) => { d.open = true; });
+  });
+  document.getElementById("collapse-all-folders")?.addEventListener("click", () => {
+    document.querySelectorAll(".folder-group").forEach((d) => { d.open = false; });
+  });
+
   const sortSelect = document.getElementById("sort-select");
   if (sortSelect) sortSelect.addEventListener("change", () => sortSelect.form.submit());
 

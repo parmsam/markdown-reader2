@@ -291,6 +291,7 @@ def library_page(
     update_available: str | None = None,
 ) -> Html:
     folder_sort_overrides = folder_sort_overrides or {}
+    has_folders = any(a.folder for a in articles)
     if not articles:
         body = Div(
             P("Your library is empty."),
@@ -331,6 +332,17 @@ def library_page(
         if lan_url else ""
     )
     notice_banner = Div(notice, cls="notice-banner") if notice else ""
+    # Purely client-side (library.js toggles every .folder-group <details>'s
+    # `open` property directly) -- nothing to persist server-side, and this
+    # naturally reaches nested subfolders too since they share the same class.
+    folder_toggle_controls = (
+        Div(
+            Button("Expand all", type="button", cls="btn btn-sm", id="expand-all-folders"),
+            Button("Collapse all", type="button", cls="btn btn-sm", id="collapse-all-folders"),
+            cls="folder-toggle-all",
+        )
+        if has_folders else ""
+    )
     update_banner = (
         Div(
             Span(f"{APP_NAME} v{update_available} is available "),
@@ -346,7 +358,11 @@ def library_page(
         Body(
             _nav(),
             Main(
-                Div(H1("Library"), _sort_form(sort), cls="library-header"),
+                Div(
+                    H1("Library"),
+                    Div(folder_toggle_controls, _sort_form(sort), cls="library-header-controls"),
+                    cls="library-header",
+                ),
                 update_banner, lan_banner, notice_banner, body,
                 cls="container",
             ),
