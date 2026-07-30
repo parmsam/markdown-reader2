@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import re
 import time
+import tomllib
+from pathlib import Path
 
 from fasthtml.common import (
     A, Audio, Body, Blockquote, Button, Datalist, Details, Div, Form, H1, H2,
@@ -19,6 +21,12 @@ from tts import VOICES, DEFAULT_VOICE, DEFAULT_SPEED
 
 APP_NAME = "Lector"
 SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
+
+# Single source of truth is pyproject.toml's [project].version -- read once at
+# import time rather than duplicating the number here.
+APP_VERSION = tomllib.loads(
+    (Path(__file__).parent / "pyproject.toml").read_text()
+)["project"]["version"]
 
 # Cache-busting query param for static assets, fixed at process start. Static
 # files are served with a far-future Cache-Control (see app.py's get_static),
@@ -326,6 +334,7 @@ def library_page(
                 lan_banner, notice_banner, body,
                 cls="container",
             ),
+            Div(f"{APP_NAME} v{APP_VERSION}", cls="app-footer"),
         ),
     )
 

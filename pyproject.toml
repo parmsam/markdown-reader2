@@ -1,6 +1,6 @@
 [project]
 name = "markdown-reader2"
-version = "0.1.0"
+version = "1.0.0"
 description = "Locally-hosted read-aloud markdown/PDF article library powered by Kokoro TTS (MLX)"
 requires-python = ">=3.12,<3.14"
 dependencies = [
