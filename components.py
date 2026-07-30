@@ -18,6 +18,7 @@ from fasthtml.common import (
 
 from db import SORT_OPTIONS, DEFAULT_SORT
 from tts import VOICES, DEFAULT_VOICE, DEFAULT_SPEED
+from update_check import release_url
 
 APP_NAME = "Lector"
 SPEEDS = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5]
@@ -282,6 +283,7 @@ def _sort_form(sort: str) -> Form:
 def library_page(
     articles: list, lan_url: str | None = None, notice: str | None = None,
     sort: str = DEFAULT_SORT, folder_sort_overrides: dict | None = None,
+    update_available: str | None = None,
 ) -> Html:
     folder_sort_overrides = folder_sort_overrides or {}
     if not articles:
@@ -324,6 +326,15 @@ def library_page(
         if lan_url else ""
     )
     notice_banner = Div(notice, cls="notice-banner") if notice else ""
+    update_banner = (
+        Div(
+            Span(f"{APP_NAME} v{update_available} is available "),
+            A("see what's new", href=release_url(update_available), target="_blank", rel="noopener"),
+            Span(f" (you're on v{APP_VERSION})."),
+            cls="update-banner",
+        )
+        if update_available else ""
+    )
 
     return Html(
         _head(f"Library — {APP_NAME}"),
@@ -331,7 +342,7 @@ def library_page(
             _nav(),
             Main(
                 Div(H1("Library"), _sort_form(sort), cls="library-header"),
-                lan_banner, notice_banner, body,
+                update_banner, lan_banner, notice_banner, body,
                 cls="container",
             ),
             Div(f"{APP_NAME} v{APP_VERSION}", cls="app-footer"),

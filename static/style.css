@@ -163,6 +163,12 @@ body {
   border-radius: 8px; padding: 0.6rem 1rem; margin: 1rem 0; font-size: 0.9rem;
 }
 
+.update-banner {
+  background: var(--surface); border: 1px solid var(--accent); color: var(--fg-muted);
+  border-radius: 8px; padding: 0.6rem 1rem; margin: 1rem 0; font-size: 0.9rem;
+}
+.update-banner a { color: var(--accent); }
+
 .article-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; }
 .article-row {
   display: flex; justify-content: space-between; align-items: center; gap: 1rem;

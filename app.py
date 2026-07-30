@@ -24,6 +24,7 @@ import components as comp
 import db
 import pdf_ingest
 import tts
+import update_check
 import url_ingest
 from render import render_document
 
@@ -35,6 +36,10 @@ PORT = int(os.getenv("PORT", 5001))
 def _startup():
     tts.load_model()
     threading.Thread(target=cache.gc_orphaned_audio_cache, args=(DB,), daemon=True).start()
+    # Kicks off the first background version check so the cache is warm by
+    # the time anyone loads the library page, rather than every process's
+    # first page load doing a synchronous-feeling wait for nothing.
+    update_check.get_available_update(comp.APP_VERSION)
 
 
 def _get_lan_ip() -> str | None:
@@ -99,6 +104,7 @@ def get_library(request: Request, notice: str = "", sort: str = db.DEFAULT_SORT)
     return comp.library_page(
         db.list_articles(DB, sort=sort), lan_url=lan_url, notice=notice, sort=sort,
         folder_sort_overrides=db.get_folder_sort_overrides(DB),
+        update_available=update_check.get_available_update(comp.APP_VERSION),
     )
 
 
